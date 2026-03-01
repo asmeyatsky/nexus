@@ -1,0 +1,67 @@
+"""
+Application Layer
+
+Architectural Intent:
+- Application services and use cases
+- Depends only on domain layer
+- Orchestrates domain entities through ports
+"""
+
+from application.commands import *
+from application.queries import *
+from application.dtos import (
+    AccountDTO,
+    CreateAccountDTO,
+    ContactDTO,
+    CreateContactDTO,
+    OpportunityDTO,
+    CreateOpportunityDTO,
+    LeadDTO,
+    CreateLeadDTO,
+    CaseDTO,
+    CreateCaseDTO,
+)
+
+__all__ = [
+    "CreateAccountCommand",
+    "UpdateAccountCommand",
+    "DeactivateAccountCommand",
+    "CreateContactCommand",
+    "UpdateContactCommand",
+    "CreateOpportunityCommand",
+    "UpdateOpportunityStageCommand",
+    "UpdateOpportunityCommand",
+    "CreateLeadCommand",
+    "QualifyLeadCommand",
+    "ConvertLeadCommand",
+    "CreateCaseCommand",
+    "UpdateCaseStatusCommand",
+    "ResolveCaseCommand",
+    "CloseCaseCommand",
+    "GetAccountQuery",
+    "ListAccountsQuery",
+    "GetAccountsByOwnerQuery",
+    "GetContactQuery",
+    "ListContactsQuery",
+    "GetContactsByAccountQuery",
+    "GetOpportunityQuery",
+    "ListOpportunitiesQuery",
+    "GetOpportunitiesByAccountQuery",
+    "GetOpenOpportunitiesQuery",
+    "GetLeadQuery",
+    "ListLeadsQuery",
+    "GetCaseQuery",
+    "GetCaseByNumberQuery",
+    "ListCasesQuery",
+    "GetOpenCasesQuery",
+    "AccountDTO",
+    "CreateAccountDTO",
+    "ContactDTO",
+    "CreateContactDTO",
+    "OpportunityDTO",
+    "CreateOpportunityDTO",
+    "LeadDTO",
+    "CreateLeadDTO",
+    "CaseDTO",
+    "CreateCaseDTO",
+]
