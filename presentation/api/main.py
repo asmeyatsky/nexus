@@ -9,8 +9,9 @@ Architectural Intent:
 
 from typing import Optional, List
 from fastapi import FastAPI, HTTPException, Depends, Query
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from pydantic import BaseModel, EmailStr, Field, validator
+from pydantic import BaseModel, EmailStr, Field, validator, constr
 from datetime import datetime, timedelta
 
 from infrastructure.adapters.auth import (
@@ -21,6 +22,7 @@ from infrastructure.adapters.auth import (
     UserCreate,
     User,
 )
+from infrastructure.config.settings import settings
 from application import (
     CreateAccountCommand,
     UpdateAccountCommand,
@@ -81,13 +83,31 @@ app = FastAPI(
     title="Nexus CRM API",
     description="Salesforce Replacement CRM API",
     version="1.0.0",
+    docs_url="/docs" if settings.debug else None,
+    redoc_url="/redoc" if settings.debug else None,
+    openapi_url="/openapi.json" if settings.debug else None,
 )
+
+# CORS middleware
+if settings.cors_allowed_origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_allowed_origins.split(","),
+        allow_credentials=settings.cors_allow_credentials,
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
+        allow_headers=["*"],
+    )
 
 app.add_middleware(
     SecurityMiddleware, rate_limiter=rate_limiter, ip_security=ip_security
 )
 rate_limiter.configure("default", RateLimitTier.STANDARD)
 ip_security.enable()
+
+# Brute force protection
+_login_attempts: dict[str, list[float]] = {}
+MAX_LOGIN_ATTEMPTS = 5
+LOGIN_LOCKOUT_SECONDS = 900  # 15 minutes
 
 security = HTTPBearer()
 
@@ -124,8 +144,21 @@ class LoginResponse(BaseModel):
     user: dict
 
 
+class RegisterRequest(BaseModel):
+    email: str
+    password: str
+    invitation_token: str
+
+
 @app.post("/auth/register", response_model=User)
-async def register(request: LoginRequest):
+async def register(
+    request: RegisterRequest,
+    current_user: TokenData = Depends(require_role(["admin"])),
+):
+    """Registration requires admin auth and an invitation token."""
+    if not request.invitation_token:
+        raise HTTPException(status_code=403, detail="Invitation token required")
+
     existing = await user_repo.get_by_email(request.email)
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
@@ -140,18 +173,50 @@ async def register(request: LoginRequest):
     return user
 
 
+def _check_brute_force(email: str):
+    """Check and enforce brute force protection."""
+    import time
+
+    now = time.time()
+    attempts = _login_attempts.get(email, [])
+    # Remove old attempts outside the lockout window
+    attempts = [t for t in attempts if now - t < LOGIN_LOCKOUT_SECONDS]
+    _login_attempts[email] = attempts
+
+    if len(attempts) >= MAX_LOGIN_ATTEMPTS:
+        raise HTTPException(
+            status_code=429,
+            detail="Too many login attempts. Try again later.",
+        )
+
+
+def _record_failed_login(email: str):
+    import time
+
+    if email not in _login_attempts:
+        _login_attempts[email] = []
+    _login_attempts[email].append(time.time())
+
+
 @app.post("/auth/login", response_model=LoginResponse)
 async def login(request: LoginRequest):
+    _check_brute_force(request.email)
+
     user = await user_repo.get_by_email(request.email)
     if not user:
+        _record_failed_login(request.email)
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     if not await user_repo.verify_password(user.id, request.password):
+        _record_failed_login(request.email)
         raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    # Clear failed attempts on success
+    _login_attempts.pop(request.email, None)
 
     access_token = create_access_token(
         data={"sub": user.id, "email": user.email, "role": user.role},
-        expires_delta=timedelta(hours=24),
+        expires_delta=timedelta(minutes=settings.access_token_expire_minutes),
     )
 
     return LoginResponse(
@@ -212,15 +277,15 @@ ORIGINS = ["web", "email", "phone", "chat", "social"]
 
 
 class CreateAccountRequest(BaseModel):
-    name: str
+    name: constr(min_length=1, max_length=255)
     industry: str = Field(..., pattern="|".join(INDUSTRIES))
     territory: str = Field(..., pattern="|".join(TERRITORIES))
-    owner_id: str
-    website: Optional[str] = None
-    phone: Optional[str] = None
-    billing_address: Optional[str] = None
+    owner_id: constr(max_length=100)
+    website: Optional[constr(max_length=2048)] = None
+    phone: Optional[constr(max_length=50)] = None
+    billing_address: Optional[constr(max_length=500)] = None
     annual_revenue: Optional[float] = Field(None, ge=0)
-    currency: str = "USD"
+    currency: constr(max_length=10) = "USD"
     employee_count: Optional[int] = Field(None, ge=0)
 
     @validator("industry")
@@ -252,14 +317,14 @@ class ContactResponse(BaseModel):
 
 
 class CreateContactRequest(BaseModel):
-    account_id: str
-    first_name: str
-    last_name: str
+    account_id: constr(max_length=100)
+    first_name: constr(min_length=1, max_length=100)
+    last_name: constr(min_length=1, max_length=100)
     email: EmailStr
-    owner_id: str
-    phone: Optional[str] = None
-    title: Optional[str] = None
-    department: Optional[str] = None
+    owner_id: constr(max_length=100)
+    phone: Optional[constr(max_length=50)] = None
+    title: Optional[constr(max_length=200)] = None
+    department: Optional[constr(max_length=200)] = None
 
 
 class OpportunityResponse(BaseModel):
@@ -285,15 +350,15 @@ class OpportunityResponse(BaseModel):
 
 
 class CreateOpportunityRequest(BaseModel):
-    account_id: str
-    name: str
-    amount: float
-    currency: str
+    account_id: constr(max_length=100)
+    name: constr(min_length=1, max_length=255)
+    amount: float = Field(..., ge=0)
+    currency: constr(max_length=10)
     close_date: datetime
-    owner_id: str
-    source: Optional[str] = None
-    contact_id: Optional[str] = None
-    description: Optional[str] = None
+    owner_id: constr(max_length=100)
+    source: Optional[constr(max_length=100)] = None
+    contact_id: Optional[constr(max_length=100)] = None
+    description: Optional[constr(max_length=5000)] = None
 
 
 class LeadResponse(BaseModel):
@@ -314,15 +379,15 @@ class LeadResponse(BaseModel):
 
 
 class CreateLeadRequest(BaseModel):
-    first_name: str
-    last_name: str
+    first_name: constr(min_length=1, max_length=100)
+    last_name: constr(min_length=1, max_length=100)
     email: EmailStr
-    company: str
-    owner_id: str
-    source: Optional[str] = None
-    phone: Optional[str] = None
-    title: Optional[str] = None
-    website: Optional[str] = None
+    company: constr(min_length=1, max_length=255)
+    owner_id: constr(max_length=100)
+    source: Optional[constr(max_length=100)] = None
+    phone: Optional[constr(max_length=50)] = None
+    title: Optional[constr(max_length=200)] = None
+    website: Optional[constr(max_length=2048)] = None
 
 
 class CaseResponse(BaseModel):
@@ -344,12 +409,12 @@ class CaseResponse(BaseModel):
 
 
 class CreateCaseRequest(BaseModel):
-    subject: str
-    description: str
-    account_id: str
-    owner_id: str
-    case_number: str
-    contact_id: Optional[str] = None
+    subject: constr(min_length=1, max_length=500)
+    description: constr(min_length=1, max_length=10000)
+    account_id: constr(max_length=100)
+    owner_id: constr(max_length=100)
+    case_number: constr(max_length=50)
+    contact_id: Optional[constr(max_length=100)] = None
     priority: str = "medium"
     origin: str = "web"
 

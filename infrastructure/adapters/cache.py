@@ -111,7 +111,7 @@ class RedisCache:
         *parts,
     ) -> str:
         parts_str = ":".join(str(p) for p in parts)
-        key_hash = hashlib.md5(parts_str.encode()).hexdigest()[:8]
+        key_hash = hashlib.sha256(parts_str.encode()).hexdigest()[:12]
         return f"nexus:{tier.value}:{org_id}:{key_hash}"
 
     async def get_session(self, session_id: str) -> Optional[Dict]:

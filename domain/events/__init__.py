@@ -22,6 +22,7 @@ class DomainEvent:
         object.__setattr__(self, "event_type", self.__class__.__name__)
 
 
+# Account Events
 @dataclass(frozen=True)
 class AccountCreatedEvent(DomainEvent):
     account_name: str = ""
@@ -33,6 +34,12 @@ class AccountUpdatedEvent(DomainEvent):
 
 
 @dataclass(frozen=True)
+class AccountDeactivatedEvent(DomainEvent):
+    pass
+
+
+# Contact Events
+@dataclass(frozen=True)
 class ContactCreatedEvent(DomainEvent):
     contact_name: str = ""
     account_id: str = ""
@@ -43,6 +50,7 @@ class ContactUpdatedEvent(DomainEvent):
     pass
 
 
+# Opportunity Events
 @dataclass(frozen=True)
 class OpportunityCreatedEvent(DomainEvent):
     opportunity_name: str = ""
@@ -69,6 +77,7 @@ class OpportunityLostEvent(DomainEvent):
     reason: str = ""
 
 
+# Lead Events
 @dataclass(frozen=True)
 class LeadCreatedEvent(DomainEvent):
     lead_name: str = ""
@@ -82,12 +91,18 @@ class LeadStatusChangedEvent(DomainEvent):
 
 
 @dataclass(frozen=True)
+class LeadQualifiedEvent(DomainEvent):
+    score: int = 0
+
+
+@dataclass(frozen=True)
 class LeadConvertedEvent(DomainEvent):
     account_id: str = ""
     contact_id: str = ""
     opportunity_id: str = ""
 
 
+# Case Events
 @dataclass(frozen=True)
 class CaseCreatedEvent(DomainEvent):
     case_number: str = ""
@@ -106,3 +121,49 @@ class CaseStatusChangedEvent(DomainEvent):
 class CaseResolvedEvent(DomainEvent):
     resolution_notes: str = ""
     resolved_by: str = ""
+
+
+@dataclass(frozen=True)
+class CaseEscalatedEvent(DomainEvent):
+    priority: str = ""
+    reason: str = ""
+
+
+# Campaign Events
+@dataclass(frozen=True)
+class CampaignCreatedEvent(DomainEvent):
+    campaign_name: str = ""
+
+
+@dataclass(frozen=True)
+class CampaignActivatedEvent(DomainEvent):
+    pass
+
+
+@dataclass(frozen=True)
+class CampaignCompletedEvent(DomainEvent):
+    pass
+
+
+# Activity Events
+@dataclass(frozen=True)
+class ActivityCreatedEvent(DomainEvent):
+    activity_type: str = ""
+    subject: str = ""
+
+
+@dataclass(frozen=True)
+class ActivityCompletedEvent(DomainEvent):
+    pass
+
+
+# Quote Events
+@dataclass(frozen=True)
+class QuoteCreatedEvent(DomainEvent):
+    opportunity_id: str = ""
+    amount: float = 0.0
+
+
+@dataclass(frozen=True)
+class QuoteAcceptedEvent(DomainEvent):
+    amount: float = 0.0

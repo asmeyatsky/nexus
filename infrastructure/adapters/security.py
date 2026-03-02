@@ -203,8 +203,9 @@ class SecurityMiddleware:
             await response(scope, receive, send)
             return
 
-        user_id = request.headers.get("X-User-ID", "anonymous")
-        org_id = request.headers.get("X-Org-ID", "default")
+        # Use client IP for rate limiting — never trust spoofable headers
+        user_id = client_ip
+        org_id = "default"
 
         allowed, info = self.rate_limiter.check_rate_limit(user_id, org_id)
         if not allowed:

@@ -75,6 +75,13 @@ class AuditLog:
         return hashlib.sha256(data.encode()).hexdigest()[:16]
 
 
+def _hash_pii(value: Optional[str]) -> Optional[str]:
+    """Hash PII values for storage while preserving lookup capability."""
+    if not value:
+        return value
+    return hashlib.sha256(value.encode()).hexdigest()[:16]
+
+
 class AuditLogService:
     """Enterprise audit logging service with Cloud Audit Logs integration."""
 
@@ -109,9 +116,9 @@ class AuditLogService:
             resource_type=resource_type,
             resource_id=resource_id,
             user_id=user_id,
-            user_email=user_email,
+            user_email=_hash_pii(user_email),
             org_id=org_id,
-            ip_address=ip_address,
+            ip_address=_hash_pii(ip_address),
             user_agent=user_agent,
             request_id=request_id,
             changes=changes,

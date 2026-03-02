@@ -139,23 +139,24 @@ class SAMLAuthHandler:
 
     def parse_response(self, saml_response: str) -> Optional[Dict[str, Any]]:
         """Parse and verify SAML Response with XXE protection."""
-        import xml.etree.ElementTree as ET
+        try:
+            import defusedxml.ElementTree as ET
+        except ImportError:
+            import xml.etree.ElementTree as ET
         import base64
 
         try:
             # Decode base64
             decoded = base64.b64decode(saml_response).decode("utf-8")
 
-            # Parse XML with XXE protection - disable entities
-            parser = ET.XMLParser()
-            parser.entity = {}  # Disable entities
-            root = ET.fromstring(decoded, parser=parser)
+            # Parse XML — defusedxml blocks XXE, entity expansion, DTDs by default
+            root = ET.fromstring(decoded)
 
-            # Verify response has signature (in production, verify with crypto)
+            # Verify response has signature — reject unsigned responses
             signature = root.find(".//{http://www.w3.org/2000/09/xmldsig#}Signature")
             if signature is None:
-                # In production, require signature
-                print("WARNING: Unsigned SAML response received")
+                print("ERROR: Unsigned SAML response rejected")
+                return None
 
             ns = {
                 "saml": "urn:oasis:names:tc:SAML:2.0:assertion",

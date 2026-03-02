@@ -21,6 +21,9 @@ python-multipart>=0.0.6
 # Redis & Caching
 redis>=5.0.0
 
+# XML Security
+defusedxml>=0.7.0
+
 # GCP Services
 google-cloud-secret-manager>=0.2.0
 google-cloud-sqlconnector>=0.8.0

@@ -3,75 +3,93 @@ name: CI/CD
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main, master, develop]
   pull_request:
-    branches: [main]
+    branches: [main, master]
 
 env:
   GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
   GKE_CLUSTER: nexus-crm-cluster
   GKE_REGION: europe-west2
+  PYTHON_VERSION: "3.11"
+  JWT_SECRET_KEY: "ci-test-secret-key"
+  DATABASE_URL: "sqlite:///test.db"
+  ENVIRONMENT: "test"
 
 jobs:
-  test:
+  lint:
     runs-on: ubuntu-latest
-    
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
-      
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: pip install ruff
+      - run: ruff check .
+      - run: ruff format --check .
+
+  security-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: pip install bandit safety
+      - name: Run Bandit security scan
+        run: bandit -r domain/ application/ infrastructure/ presentation/ -ll
+      - name: Check dependencies for vulnerabilities
+        run: safety check -r requirements.txt || true
+
+  test:
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
-          pip install pytest pytest-cov
-      
-      - name: Run linting
-        run: |
-          pip install ruff
-          ruff check .
-      
+          pip install pytest pytest-asyncio pytest-cov httpx
       - name: Run type checking
         run: |
           pip install mypy
           mypy domain application infrastructure --ignore-missing-imports || true
-      
-      - name: Run tests
+      - name: Run tests with coverage
         run: |
-          pytest tests/ -v --cov=. --cov-report=xml
-      
+          pytest tests/ -v \
+            --cov=domain --cov=application --cov=infrastructure --cov=presentation \
+            --cov-report=xml --cov-report=term-missing \
+            --cov-fail-under=80
       - name: Upload coverage
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v4
         with:
           files: ./coverage.xml
 
   build:
-    needs: test
+    needs: [test, security-scan]
     runs-on: ubuntu-latest
-    
+    if: github.event_name == 'push'
     steps:
       - uses: actions/checkout@v4
-      
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-      
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
-      
       - name: Configure Docker
         run: gcloud auth configure-docker
-      
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
           context: .
           push: true
-          tags: gcr.io/${{ secrets.GCP_PROJECT_ID }}/nexus-crm:${{ github.sha }}
+          tags: |
+            gcr.io/${{ secrets.GCP_PROJECT_ID }}/nexus-crm:${{ github.sha }}
+            gcr.io/${{ secrets.GCP_PROJECT_ID }}/nexus-crm:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -79,56 +97,42 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/develop'
-    
+    environment: staging
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
+      - uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
-      
-      - name: Get GKE credentials
-        uses: google-github-actions/get-gke-credentials@v2
+      - uses: google-github-actions/get-gke-credentials@v2
         with:
           cluster_name: ${{ env.GKE_CLUSTER }}
           location: ${{ env.GKE_REGION }}
-      
-      - name: Deploy to GKE Staging
+      - name: Deploy to staging
         run: |
           kubectl set image deployment/nexus-crm \
             nexus-crm=gcr.io/${{ secrets.GCP_PROJECT_ID }}/nexus-crm:${{ github.sha }} \
             --namespace=staging
-          
           kubectl rollout status deployment/nexus-crm \
-            --namespace=staging \
-            --timeout=300s
+            --namespace=staging --timeout=300s
 
   deploy-production:
     needs: build
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
-    
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    environment: production
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
+      - uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
-      
-      - name: Get GKE credentials
-        uses: google-github-actions/get-gke-credentials@v2
+      - uses: google-github-actions/get-gke-credentials@v2
         with:
           cluster_name: ${{ env.GKE_CLUSTER }}
           location: ${{ env.GKE_REGION }}
-      
-      - name: Deploy to GKE Production
+      - name: Deploy to production
         run: |
           kubectl set image deployment/nexus-crm \
             nexus-crm=gcr.io/${{ secrets.GCP_PROJECT_ID }}/nexus-crm:${{ github.sha }} \
             --namespace=production
-          
           kubectl rollout status deployment/nexus-crm \
-            --namespace=production \
-            --timeout=300s
+            --namespace=production --timeout=300s

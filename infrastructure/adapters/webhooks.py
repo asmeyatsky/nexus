@@ -60,7 +60,17 @@ def is_url_safe(url: str) -> tuple[bool, str]:
                 if ip in ipaddress.ip_network(blocked):
                     return False, "Internal IPs are not allowed"
         except ValueError:
-            pass
+            # Hostname is not an IP — resolve it to check for DNS rebinding
+            import socket
+            try:
+                resolved_ips = socket.getaddrinfo(parsed.hostname, None)
+                for _, _, _, _, addr in resolved_ips:
+                    resolved_ip = ipaddress.ip_address(addr[0])
+                    for blocked in BLOCKED_IP_RANGES:
+                        if resolved_ip in ipaddress.ip_network(blocked):
+                            return False, "Resolved IP is in blocked range"
+            except socket.gaierror:
+                return False, "Could not resolve hostname"
 
         # Block localhost variations
         if parsed.hostname.lower() in ("localhost", "localhost.localdomain"):
@@ -176,7 +186,8 @@ class WebhookService:
     async def _deliver(self, webhook: Webhook, event: WebhookEvent, payload: Dict):
         delivery_id = str(uuid4())
 
-        signature = self._generate_signature(payload, webhook.secret)
+        timestamp = str(int(time.time()))
+        signature = self._generate_signature(payload, webhook.secret, timestamp)
 
         delivery = WebhookDelivery(
             id=delivery_id,
@@ -190,6 +201,7 @@ class WebhookService:
         headers = {
             "Content-Type": "application/json",
             "X-Webhook-Signature": signature,
+            "X-Webhook-Timestamp": timestamp,
             "X-Webhook-Event": event.value,
             "X-Webhook-Delivery": delivery_id,
         }
@@ -236,11 +248,13 @@ class WebhookService:
             if webhook.failure_count >= 10:
                 webhook.is_active = False
 
-    def _generate_signature(self, payload: Dict, secret: str) -> str:
+    def _generate_signature(self, payload: Dict, secret: str, timestamp: str = "") -> str:
         import json
 
         body = json.dumps(payload, sort_keys=True)
-        signature = hmac.new(secret.encode(), body.encode(), hashlib.sha256)
+        # Include timestamp in signature to prevent replay attacks
+        message = f"{timestamp}.{body}" if timestamp else body
+        signature = hmac.new(secret.encode(), message.encode(), hashlib.sha256)
         return signature.hexdigest()
 
     def get_delivery_status(self, delivery_id: str) -> Optional[Dict]:

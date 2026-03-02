@@ -71,14 +71,20 @@ class BigQueryReporter:
         if errors:
             print(f"BigQuery insert errors: {errors}")
     
-    async def run_query(self, query: str) -> List[Dict]:
-        """Execute a query."""
+    async def run_query(self, query: str, params: List = None) -> List[Dict]:
+        """Execute a parameterized query."""
         if not self._client:
             return []
-        
-        query_job = self._client.query(query)
+
+        from google.cloud.bigquery import QueryJobConfig, ScalarQueryParameter
+
+        job_config = QueryJobConfig()
+        if params:
+            job_config.query_parameters = params
+
+        query_job = self._client.query(query, job_config=job_config)
         results = query_job.result()
-        
+
         return [dict(row) for row in results]
     
     async def get_pipeline_summary(
@@ -87,27 +93,29 @@ class BigQueryReporter:
         start_date: datetime,
         end_date: datetime,
     ) -> Dict:
-        """Get sales pipeline summary = f."""
-        
-        query"""
-        SELECT 
+        """Get sales pipeline summary."""
+        from google.cloud.bigquery import ScalarQueryParameter
+
+        query = f"""
+        SELECT
             stage,
             COUNT(*) as count,
             SUM(amount) as total_amount,
             AVG(amount) as avg_amount
         FROM `{self.project_id}.nexus_analytics.pipeline`
-        WHERE org_id = '{org_id}'
+        WHERE org_id = @org_id
             AND created_at BETWEEN @start_date AND @end_date
         GROUP BY stage
         """
-        
-        params = {
-            "start_date": start_date.isoformat(),
-            "end_date": end_date.isoformat(),
-        }
-        
-        results = await self.run_query(query)
-        
+
+        params = [
+            ScalarQueryParameter("org_id", "STRING", org_id),
+            ScalarQueryParameter("start_date", "TIMESTAMP", start_date.isoformat()),
+            ScalarQueryParameter("end_date", "TIMESTAMP", end_date.isoformat()),
+        ]
+
+        results = await self.run_query(query, params)
+
         return {
             "period": {"start": start_date.isoformat(), "end": end_date.isoformat()},
             "by_stage": results,
@@ -119,22 +127,28 @@ class BigQueryReporter:
         quarters: int = 4,
     ) -> Dict:
         """Get sales forecast."""
-        
+        from google.cloud.bigquery import ScalarQueryParameter
+
         query = f"""
-        SELECT 
+        SELECT
             DATE_TRUNC(close_date, QUARTER) as quarter,
             SUM(amount) as pipeline,
             COUNT(*) as opportunities
         FROM `{self.project_id}.nexus_analytics.pipeline`
-        WHERE org_id = '{org_id}'
+        WHERE org_id = @org_id
             AND close_date >= CURRENT_DATE()
             AND stage NOT IN ('closed_won', 'closed_lost')
         GROUP BY quarter
         ORDER BY quarter
         LIMIT @quarters
         """
-        
-        results = await self.run_query(query)
+
+        params = [
+            ScalarQueryParameter("org_id", "STRING", org_id),
+            ScalarQueryParameter("quarters", "INT64", quarters),
+        ]
+
+        results = await self.run_query(query, params)
         
         total_pipeline = sum(r.get("pipeline", 0) for r in results)
         
@@ -151,27 +165,34 @@ class BigQueryReporter:
         days: int = 30,
     ) -> Dict:
         """Get user activity report."""
-        
+        from google.cloud.bigquery import ScalarQueryParameter
+
         start_date = datetime.now() - timedelta(days=days)
-        
+
         query = f"""
-        SELECT 
+        SELECT
             user_id,
             activity_type,
             COUNT(*) as count,
             COUNT(DISTINCT record_id) as unique_records
         FROM `{self.project_id}.nexus_analytics.activity`
-        WHERE org_id = '{org_id}'
+        WHERE org_id = @org_id
             AND created_at >= @start_date
         """
-        
+
+        params = [
+            ScalarQueryParameter("org_id", "STRING", org_id),
+            ScalarQueryParameter("start_date", "TIMESTAMP", start_date.isoformat()),
+        ]
+
         if user_id:
-            query += f" AND user_id = '{user_id}'"
-        
+            query += " AND user_id = @user_id"
+            params.append(ScalarQueryParameter("user_id", "STRING", user_id))
+
         query += " GROUP BY user_id, activity_type ORDER BY count DESC"
-        
-        results = await self.run_query(query)
-        
+
+        results = await self.run_query(query, params)
+
         return {
             "period_days": days,
             "activities": results,
@@ -182,35 +203,38 @@ class BigQueryReporter:
         org_id: str,
     ) -> Dict:
         """Get conversion funnel analytics."""
-        
+        from google.cloud.bigquery import ScalarQueryParameter
+
         query = f"""
-        SELECT 
+        SELECT
             'leads' as stage,
             COUNT(*) as count
         FROM `{self.project_id}.nexus_analytics.pipeline`
-        WHERE org_id = '{org_id}'
+        WHERE org_id = @org_id
         UNION ALL
-        SELECT 
+        SELECT
             'qualified' as stage,
             COUNT(*) as count
         FROM `{self.project_id}.nexus_analytics.pipeline`
-        WHERE org_id = '{org_id}' AND status = 'qualified'
+        WHERE org_id = @org_id AND status = 'qualified'
         UNION ALL
-        SELECT 
+        SELECT
             'opportunities' as stage,
             COUNT(*) as count
         FROM `{self.project_id}.nexus_analytics.pipeline`
-        WHERE org_id = '{org_id}' AND type = 'opportunity'
+        WHERE org_id = @org_id AND type = 'opportunity'
         UNION ALL
-        SELECT 
+        SELECT
             'won' as stage,
             COUNT(*) as count
         FROM `{self.project_id}.nexus_analytics.pipeline`
-        WHERE org_id = '{org_id}' AND stage = 'closed_won'
+        WHERE org_id = @org_id AND stage = 'closed_won'
         """
-        
-        results = await self.run_query(query)
-        
+
+        params = [ScalarQueryParameter("org_id", "STRING", org_id)]
+
+        results = await self.run_query(query, params)
+
         return {"funnel": results}
     
     def create_report(
@@ -237,25 +261,46 @@ class BigQueryReporter:
         
         return report
     
+    _ALLOWED_COLUMNS = {
+        "stage", "status", "type", "source", "owner_id", "priority",
+        "industry", "territory", "channel", "campaign_id", "rating",
+        "amount", "count", "revenue", "cost", "probability",
+    }
+
+    def _sanitize_column(self, col: str) -> str:
+        """Only allow whitelisted column names to prevent SQL injection."""
+        import re
+        col = col.strip()
+        if col not in self._ALLOWED_COLUMNS or not re.match(r"^[a-z_]+$", col):
+            raise ValueError(f"Invalid column name: {col}")
+        return col
+
     async def generate_report(self, report: ReportDefinition) -> Dict:
-        """Generate report from definition."""
-        
-        dimensions_str = ", ".join(report.dimensions)
-        metrics_str = ", ".join([f"SUM({m}) as {m}" for m in report.metrics])
-        
+        """Generate report from definition with sanitized column names."""
+        from google.cloud.bigquery import ScalarQueryParameter
+
+        safe_dims = [self._sanitize_column(d) for d in report.dimensions]
+        safe_metrics = [self._sanitize_column(m) for m in report.metrics]
+
+        dimensions_str = ", ".join(safe_dims)
+        metrics_str = ", ".join([f"SUM({m}) as {m}" for m in safe_metrics])
+
         query = f"""
-        SELECT 
+        SELECT
             {dimensions_str},
             {metrics_str}
         FROM `{self.project_id}.nexus_analytics.events`
-        WHERE org_id = '{report.org_id}'
+        WHERE org_id = @org_id
         """
-        
+
         if report.group_by:
-            query += f" GROUP BY {', '.join(report.group_by)}"
-        
-        results = await self.run_query(query)
-        
+            safe_group = [self._sanitize_column(g) for g in report.group_by]
+            query += f" GROUP BY {', '.join(safe_group)}"
+
+        params = [ScalarQueryParameter("org_id", "STRING", report.org_id)]
+
+        results = await self.run_query(query, params)
+
         return {
             "report_id": report.id,
             "report_name": report.name,

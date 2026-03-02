@@ -57,7 +57,7 @@ class Settings(BaseSettings):
     rate_limit_window: int = 60
 
     # IP Security
-    ip_allowlist_enabled: bool = False
+    ip_allowlist_enabled: bool = True
     ip_blocklist_enabled: bool = True
 
     # CORS
@@ -75,12 +75,28 @@ class Settings(BaseSettings):
         case_sensitive = False
 
     def validate_secrets(self):
-        """Ensure critical secrets are not empty in production."""
+        """Ensure critical secrets are not empty in any environment."""
+        if not self.jwt_secret_key:
+            raise ValueError("JWT_SECRET_KEY must be set")
+        if not self.database_url:
+            raise ValueError("DATABASE_URL must be set")
+
         if self.environment == "production":
-            if not self.jwt_secret_key:
-                raise ValueError("JWT_SECRET_KEY must be set in production")
-            if not self.database_url:
-                raise ValueError("DATABASE_URL must be set in production")
+            if not self.redis_url or self.redis_url == "redis://localhost:6379":
+                raise ValueError("REDIS_URL must be explicitly set in production")
+            required_prod = {
+                "SSO_GOOGLE_CLIENT_ID": self.sso_google_client_id,
+                "SSO_GOOGLE_CLIENT_SECRET": self.sso_google_client_secret,
+                "SSO_AZURE_CLIENT_ID": self.sso_azure_client_id,
+                "SSO_AZURE_CLIENT_SECRET": self.sso_azure_client_secret,
+                "SSO_AZURE_TENANT_ID": self.sso_azure_tenant_id,
+                "SSO_OKTA_DOMAIN": self.sso_okta_domain,
+                "SSO_OKTA_API_KEY": self.sso_okta_api_key,
+                "SENDGRID_API_KEY": self.sendgrid_api_key,
+            }
+            for name, value in required_prod.items():
+                if not value:
+                    raise ValueError(f"{name} must be set in production")
 
 
 @lru_cache()
