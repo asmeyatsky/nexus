@@ -7,13 +7,12 @@ Architectural Intent:
 - Lead scoring and nurturing
 """
 
-from typing import Dict, Any, List, Optional
+from typing import Dict, List, Optional
 from dataclasses import dataclass, field
 from datetime import datetime
 from uuid import uuid4
 from enum import Enum
 import httpx
-import asyncio
 
 
 class CampaignStatus(Enum):
@@ -51,11 +50,11 @@ class Campaign:
     recipient_count: int = 0
     open_count: int = 0
     click_count: int = 0
-    bounce_count: int = created_at: datetime = field(default_factory=datetime.now)
+    bounce_count: int = 0
+    created_at: datetime = field(default_factory=datetime.now)
 
 
- 0
-   @dataclass
+@dataclass
 class LeadScore:
     lead_id: str
     score: int = 0
@@ -66,16 +65,16 @@ class LeadScore:
 
 class MarketingAutomationService:
     """Marketing automation with email provider integration."""
-    
+
     def __init__(self):
         self._campaigns: Dict[str, Campaign] = {}
         self._templates: Dict[str, EmailTemplate] = {}
         self._lead_scores: Dict[str, LeadScore] = {}
         self._provider_config: Dict[EmailProvider, Dict] = {}
-    
+
     def configure_provider(self, provider: EmailProvider, config: Dict):
         self._provider_config[provider] = config
-    
+
     async def send_via_sendgrid(
         self,
         to: List[str],
@@ -85,16 +84,16 @@ class MarketingAutomationService:
     ) -> Dict:
         config = self._provider_config.get(EmailProvider.SENDGRID, {})
         api_key = config.get("api_key", "")
-        
+
         if not api_key:
             return {"success": False, "error": "SendGrid not configured"}
-        
+
         url = "https://api.sendgrid.com/v3/mail/send"
         headers = {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
         }
-        
+
         messages = [
             {
                 "to": [{"email": email} for email in to],
@@ -103,14 +102,19 @@ class MarketingAutomationService:
                 "html": html,
             }
         ]
-        
+
         async with httpx.AsyncClient() as client:
             try:
-                response = await client.post(url, headers=headers, json={"personalizations": messages})
-                return {"success": response.status_code in (200, 202, 201), "status": response.status_code}
+                response = await client.post(
+                    url, headers=headers, json={"personalizations": messages}
+                )
+                return {
+                    "success": response.status_code in (200, 202, 201),
+                    "status": response.status_code,
+                }
             except Exception as e:
                 return {"success": False, "error": str(e)}
-    
+
     async def send_via_mailchimp(
         self,
         to: List[str],
@@ -121,26 +125,29 @@ class MarketingAutomationService:
         config = self._provider_config.get(EmailProvider.MAILCHIMP, {})
         api_key = config.get("api_key", "")
         dc = api_key.split("-")[-1] if api_key else ""
-        
+
         if not api_key:
             return {"success": False, "error": "Mailchimp not configured"}
-        
+
         url = f"https://{dc}.api.mailchimp.com/3.0/campaigns"
         auth = ("anystring", api_key)
-        
+
         campaign_data = {
             "type": "regular",
             "recipients": {"list_id": list_id},
             "settings": {"subject_line": subject, "reply_to": "noreply@company.com"},
         }
-        
+
         async with httpx.AsyncClient() as client:
             try:
                 response = await client.post(url, auth=auth, json=campaign_data)
-                return {"success": response.status_code in (200, 201), "campaign_id": response.json().get("id")}
+                return {
+                    "success": response.status_code in (200, 201),
+                    "campaign_id": response.json().get("id"),
+                }
             except Exception as e:
                 return {"success": False, "error": str(e)}
-    
+
     def create_campaign(
         self,
         name: str,
@@ -156,25 +163,25 @@ class MarketingAutomationService:
         )
         self._campaigns[campaign.id] = campaign
         return campaign
-    
+
     def schedule_campaign(self, campaign_id: str, scheduled_at: datetime) -> bool:
         campaign = self._campaigns.get(campaign_id)
         if not campaign or campaign.status != CampaignStatus.DRAFT:
             return False
-        
+
         campaign.status = CampaignStatus.SCHEDULED
         campaign.scheduled_at = scheduled_at
         return True
-    
+
     async def send_campaign(self, campaign_id: str) -> Dict:
         campaign = self._campaigns.get(campaign_id)
         if not campaign:
             return {"success": False, "error": "Campaign not found"}
-        
+
         template = self._templates.get(campaign.template_id)
         if not template:
             return {"success": False, "error": "Template not found"}
-        
+
         if template.provider == EmailProvider.SENDGRID:
             result = await self.send_via_sendgrid(
                 to=["recipient@example.com"],
@@ -190,13 +197,13 @@ class MarketingAutomationService:
             )
         else:
             result = {"success": False, "error": "Unknown provider"}
-        
+
         if result.get("success"):
             campaign.status = CampaignStatus.SENT
             campaign.sent_at = datetime.now()
-        
+
         return result
-    
+
     def update_lead_score(
         self,
         lead_id: str,
@@ -205,20 +212,24 @@ class MarketingAutomationService:
     ):
         if lead_id not in self._lead_scores:
             self._lead_scores[lead_id] = LeadScore(lead_id=lead_id)
-        
+
         score = self._lead_scores[lead_id]
         score.behavioral_score += behavioral_points
         score.demographic_score += demographic_points
         score.score = score.behavioral_score + score.demographic_score
         score.last_updated = datetime.now()
-        
+
         return score
-    
+
     def get_lead_score(self, lead_id: str) -> Optional[LeadScore]:
         return self._lead_scores.get(lead_id)
-    
+
     def get_hot_leads(self, min_score: int = 50) -> List[str]:
-        return [lead_id for lead_id, score in self._lead_scores.items() if score.score >= min_score]
+        return [
+            lead_id
+            for lead_id, score in self._lead_scores.items()
+            if score.score >= min_score
+        ]
 
 
 marketing_service = MarketingAutomationService()

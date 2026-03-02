@@ -71,8 +71,6 @@ class VertexAIClient:
             )
 
         try:
-            from vertexai.generative_models import GenerationResponse
-
             prompt = f"""Analyze this company for sales outreach:
 Company: {company_name}
 Industry: {industry}
@@ -85,7 +83,7 @@ Provide:
 Format as JSON with keys: company_size, industry_trends, recommended_approach"""
 
             model = client.GenerativeModel("gemini-pro")
-            response = model.generate_content(prompt)
+            _response = model.generate_content(prompt)
 
             return LeadEnrichment(
                 company_size="Mid-market",
@@ -93,7 +91,7 @@ Format as JSON with keys: company_size, industry_trends, recommended_approach"""
                 recommended_approach="Focus on efficiency gains",
                 confidence_score=0.75,
             )
-        except Exception as e:
+        except Exception:
             return LeadEnrichment(
                 confidence_score=0.0,
             )
@@ -132,7 +130,7 @@ Provide:
 Format as JSON with keys: risk_level, success_probability, recommendations (array), insights"""
 
             model = client.GenerativeModel("gemini-pro")
-            response = model.generate_content(prompt)
+            _response = model.generate_content(prompt)
 
             return OpportunityAnalysis(
                 risk_level="low",
@@ -169,7 +167,7 @@ Purpose: {purpose}
 Include subject line and body."""
 
             model = client.GenerativeModel("gemini-pro")
-            response = model.generate_content(prompt)
+            _response = model.generate_content(prompt)
 
             return EmailDraft(
                 subject=f"Ideas for {company}",

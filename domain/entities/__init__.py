@@ -18,7 +18,11 @@ from domain.entities.product import Product, PriceBookEntry
 from domain.entities.quote import Quote, QuoteStatus, QuoteLineItem
 from domain.entities.knowledge_article import KnowledgeArticle, ArticleStatus
 from domain.entities.csat import CSATSurvey
-from domain.entities.custom_field import CustomFieldDefinition, CustomFieldValue, FieldType
+from domain.entities.custom_field import (
+    CustomFieldDefinition,
+    CustomFieldValue,
+    FieldType,
+)
 from domain.entities.pipeline import Pipeline, PipelineStage
 from domain.entities.event import Event, EventStatus, EventType
 from domain.entities.health_score import AccountHealthScore, HealthGrade
@@ -28,19 +32,41 @@ from domain.entities.attachment import Attachment
 __all__ = [
     "Account",
     "Contact",
-    "Opportunity", "OpportunityStage", "OpportunitySource",
-    "Lead", "LeadStatus", "LeadRating",
-    "Case", "CaseStatus", "CasePriority", "CaseOrigin",
-    "Activity", "ActivityType", "ActivityStatus",
-    "Campaign", "CampaignStatus", "CampaignType",
-    "Product", "PriceBookEntry",
-    "Quote", "QuoteStatus", "QuoteLineItem",
-    "KnowledgeArticle", "ArticleStatus",
+    "Opportunity",
+    "OpportunityStage",
+    "OpportunitySource",
+    "Lead",
+    "LeadStatus",
+    "LeadRating",
+    "Case",
+    "CaseStatus",
+    "CasePriority",
+    "CaseOrigin",
+    "Activity",
+    "ActivityType",
+    "ActivityStatus",
+    "Campaign",
+    "CampaignStatus",
+    "CampaignType",
+    "Product",
+    "PriceBookEntry",
+    "Quote",
+    "QuoteStatus",
+    "QuoteLineItem",
+    "KnowledgeArticle",
+    "ArticleStatus",
     "CSATSurvey",
-    "CustomFieldDefinition", "CustomFieldValue", "FieldType",
-    "Pipeline", "PipelineStage",
-    "Event", "EventStatus", "EventType",
-    "AccountHealthScore", "HealthGrade",
-    "Relationship", "RelationshipType",
+    "CustomFieldDefinition",
+    "CustomFieldValue",
+    "FieldType",
+    "Pipeline",
+    "PipelineStage",
+    "Event",
+    "EventStatus",
+    "EventType",
+    "AccountHealthScore",
+    "HealthGrade",
+    "Relationship",
+    "RelationshipType",
     "Attachment",
 ]

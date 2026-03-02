@@ -13,7 +13,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from domain import Contact, Email, PhoneNumber
-from domain.ports.repository_ports import ContactRepositoryPort
 from infrastructure.database import ContactModel
 
 

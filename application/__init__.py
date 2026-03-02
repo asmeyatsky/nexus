@@ -7,8 +7,41 @@ Architectural Intent:
 - Orchestrates domain entities through ports
 """
 
-from application.commands import *
-from application.queries import *
+from application.commands import (
+    CreateAccountCommand,
+    UpdateAccountCommand,
+    DeactivateAccountCommand,
+    CreateContactCommand,
+    UpdateContactCommand,
+    CreateOpportunityCommand,
+    UpdateOpportunityStageCommand,
+    UpdateOpportunityCommand,
+    CreateLeadCommand,
+    QualifyLeadCommand,
+    ConvertLeadCommand,
+    CreateCaseCommand,
+    UpdateCaseStatusCommand,
+    ResolveCaseCommand,
+    CloseCaseCommand,
+)
+from application.queries import (
+    GetAccountQuery,
+    ListAccountsQuery,
+    GetAccountsByOwnerQuery,
+    GetContactQuery,
+    ListContactsQuery,
+    GetContactsByAccountQuery,
+    GetOpportunityQuery,
+    ListOpportunitiesQuery,
+    GetOpportunitiesByAccountQuery,
+    GetOpenOpportunitiesQuery,
+    GetLeadQuery,
+    ListLeadsQuery,
+    GetCaseQuery,
+    GetCaseByNumberQuery,
+    ListCasesQuery,
+    GetOpenCasesQuery,
+)
 from application.dtos import (
     AccountDTO,
     CreateAccountDTO,

@@ -3,16 +3,22 @@ Nexus CRM API
 
 Architectural Intent:
 - REST API for Nexus CRM operations
-- Follows skill2026 presentation layer patterns
+- Follows presentation layer patterns
 - FastAPI-based HTTP endpoints
+- Tenant isolation via org_id
+- RBAC permission enforcement
 """
 
+import logging
 from typing import Optional, List
+from uuid import UUID as PyUUID
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, HTTPException, Depends, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, EmailStr, Field, validator, constr
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from infrastructure.adapters.auth import (
     create_access_token,
@@ -21,38 +27,31 @@ from infrastructure.adapters.auth import (
     TokenData,
     UserCreate,
     User,
+    token_revocation_store,
 )
 from infrastructure.config.settings import settings
 from application import (
     CreateAccountCommand,
     UpdateAccountCommand,
-    DeactivateAccountCommand,
     CreateContactCommand,
-    UpdateContactCommand,
     CreateOpportunityCommand,
     UpdateOpportunityStageCommand,
-    UpdateOpportunityCommand,
     CreateLeadCommand,
     QualifyLeadCommand,
-    ConvertLeadCommand,
     CreateCaseCommand,
     UpdateCaseStatusCommand,
     ResolveCaseCommand,
-    CloseCaseCommand,
     GetAccountQuery,
     ListAccountsQuery,
-    GetAccountsByOwnerQuery,
     GetContactQuery,
     ListContactsQuery,
     GetContactsByAccountQuery,
     GetOpportunityQuery,
     ListOpportunitiesQuery,
-    GetOpportunitiesByAccountQuery,
     GetOpenOpportunitiesQuery,
     GetLeadQuery,
     ListLeadsQuery,
     GetCaseQuery,
-    GetCaseByNumberQuery,
     ListCasesQuery,
     GetOpenCasesQuery,
     CreateAccountDTO,
@@ -78,6 +77,28 @@ from infrastructure.adapters.security import (
     ip_security,
     RateLimitTier,
 )
+from infrastructure.adapters.rbac import (
+    Permission,
+    RoleType,
+    rbac_service,
+)
+
+logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application startup/shutdown lifecycle."""
+    # Register event subscribers at startup
+    try:
+        from application.event_handlers import register_all_subscribers
+
+        register_all_subscribers(event_bus)
+        logger.info("Event subscribers registered")
+    except ImportError:
+        pass
+    yield
+
 
 app = FastAPI(
     title="Nexus CRM API",
@@ -86,6 +107,7 @@ app = FastAPI(
     docs_url="/docs" if settings.debug else None,
     redoc_url="/redoc" if settings.debug else None,
     openapi_url="/openapi.json" if settings.debug else None,
+    lifespan=lifespan,
 )
 
 # CORS middleware
@@ -119,6 +141,11 @@ async def get_current_user(
     token_data = decode_token(token)
     if not token_data:
         raise HTTPException(status_code=401, detail="Invalid token")
+
+    # Check if token has been revoked
+    if token_data.jti and await token_revocation_store.is_revoked(token_data.jti):
+        raise HTTPException(status_code=401, detail="Token has been revoked")
+
     return token_data
 
 
@@ -131,6 +158,36 @@ def require_role(allowed_roles: List[str]):
         return current_user
 
     return role_checker
+
+
+def require_permission(permission: Permission):
+    """FastAPI dependency for RBAC permission checks."""
+
+    async def permission_checker(
+        current_user: TokenData = Depends(get_current_user),
+    ) -> TokenData:
+        # Admin bypasses permission checks
+        if current_user.role == "admin":
+            return current_user
+
+        # Map role string to RoleType for RBAC lookup
+        try:
+            role_type = RoleType(current_user.role)
+        except ValueError:
+            role_type = RoleType.READ_ONLY
+
+        from infrastructure.adapters.rbac import ROLE_PERMISSIONS
+
+        role_perms = ROLE_PERMISSIONS.get(role_type, set())
+
+        if permission not in role_perms:
+            raise HTTPException(
+                status_code=403,
+                detail=f"Permission denied: {permission.value}",
+            )
+        return current_user
+
+    return permission_checker
 
 
 class LoginRequest(BaseModel):
@@ -148,6 +205,11 @@ class RegisterRequest(BaseModel):
     email: str
     password: str
     invitation_token: str
+
+
+class PasswordChangeRequest(BaseModel):
+    current_password: str
+    new_password: str
 
 
 @app.post("/auth/register", response_model=User)
@@ -168,6 +230,7 @@ async def register(
             email=request.email,
             password=request.password,
             name=request.email.split("@")[0],
+            org_id=current_user.org_id,
         )
     )
     return user
@@ -215,15 +278,91 @@ async def login(request: LoginRequest):
     _login_attempts.pop(request.email, None)
 
     access_token = create_access_token(
-        data={"sub": user.id, "email": user.email, "role": user.role},
+        data={
+            "sub": user.id,
+            "email": user.email,
+            "role": user.role,
+            "org_id": user.org_id,
+        },
         expires_delta=timedelta(minutes=settings.access_token_expire_minutes),
     )
 
     return LoginResponse(
         access_token=access_token,
         token_type="bearer",
-        user={"id": user.id, "email": user.email, "role": user.role},
+        user={
+            "id": user.id,
+            "email": user.email,
+            "role": user.role,
+            "org_id": user.org_id,
+        },
     )
+
+
+@app.post("/auth/logout")
+async def logout(current_user: TokenData = Depends(get_current_user)):
+    """Revoke the current token."""
+    if current_user.jti:
+        # Revoke for token lifetime (30 min default)
+        expires_at = (
+            datetime.now(timezone.utc)
+            + timedelta(minutes=settings.access_token_expire_minutes)
+        ).timestamp()
+        await token_revocation_store.revoke(current_user.jti, expires_at)
+    return {"message": "Logged out successfully"}
+
+
+@app.post("/auth/refresh", response_model=LoginResponse)
+async def refresh_token(current_user: TokenData = Depends(get_current_user)):
+    """Issue a new token if the current token is valid."""
+    # Revoke the old token
+    if current_user.jti:
+        expires_at = (
+            datetime.now(timezone.utc)
+            + timedelta(minutes=settings.access_token_expire_minutes)
+        ).timestamp()
+        await token_revocation_store.revoke(current_user.jti, expires_at)
+
+    # Issue new token
+    new_token = create_access_token(
+        data={
+            "sub": current_user.user_id,
+            "email": current_user.email,
+            "role": current_user.role,
+            "org_id": current_user.org_id,
+        },
+        expires_delta=timedelta(minutes=settings.access_token_expire_minutes),
+    )
+
+    return LoginResponse(
+        access_token=new_token,
+        token_type="bearer",
+        user={
+            "id": current_user.user_id,
+            "email": current_user.email,
+            "role": current_user.role,
+            "org_id": current_user.org_id,
+        },
+    )
+
+
+@app.post("/auth/change-password")
+async def change_password(
+    request: PasswordChangeRequest,
+    current_user: TokenData = Depends(get_current_user),
+):
+    """Change user password with history check."""
+    if not await user_repo.verify_password(
+        current_user.user_id, request.current_password
+    ):
+        raise HTTPException(status_code=401, detail="Current password is incorrect")
+
+    try:
+        await user_repo.update_password(current_user.user_id, request.new_password)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    return {"message": "Password changed successfully"}
 
 
 account_repo = InMemoryAccountRepository()
@@ -444,7 +583,7 @@ async def health():
 @app.post("/accounts", response_model=AccountResponse)
 async def create_account(
     request: CreateAccountRequest,
-    current_user: TokenData = Depends(require_role(["admin", "manager", "sales_rep"])),
+    current_user: TokenData = Depends(require_permission(Permission.ACCOUNTS_CREATE)),
 ):
     dto = CreateAccountDTO(
         name=request.name,
@@ -464,6 +603,15 @@ async def create_account(
         audit_log=audit_log,
     )
     result = await command.execute(dto)
+
+    # Grant record access to creator
+    try:
+        rbac_service.grant_record_access(
+            "account", PyUUID(result.id), [PyUUID(current_user.user_id)]
+        )
+    except (ValueError, TypeError):
+        pass
+
     return result
 
 
@@ -471,7 +619,7 @@ async def create_account(
 async def list_accounts(
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
-    current_user: TokenData = Depends(get_current_user),
+    current_user: TokenData = Depends(require_permission(Permission.ACCOUNTS_VIEW)),
 ):
     query = ListAccountsQuery(repository=account_repo)
     return await query.execute(limit, offset)
@@ -480,7 +628,7 @@ async def list_accounts(
 @app.get("/accounts/{account_id}", response_model=AccountResponse)
 async def get_account(
     account_id: str,
-    current_user: TokenData = Depends(get_current_user),
+    current_user: TokenData = Depends(require_permission(Permission.ACCOUNTS_VIEW)),
 ):
     query = GetAccountQuery(repository=account_repo)
     result = await query.execute(account_id)
@@ -493,7 +641,7 @@ async def get_account(
 async def update_account(
     account_id: str,
     request: CreateAccountRequest,
-    current_user: TokenData = Depends(require_role(["admin", "manager", "sales_rep"])),
+    current_user: TokenData = Depends(require_permission(Permission.ACCOUNTS_EDIT)),
 ):
     dto = CreateAccountDTO(
         name=request.name,
@@ -522,7 +670,7 @@ async def update_account(
 @app.post("/contacts", response_model=ContactResponse)
 async def create_contact(
     request: CreateContactRequest,
-    current_user: TokenData = Depends(require_role(["admin", "manager", "sales_rep"])),
+    current_user: TokenData = Depends(require_permission(Permission.CONTACTS_CREATE)),
 ):
     dto = CreateContactDTO(
         account_id=request.account_id,
@@ -541,6 +689,14 @@ async def create_contact(
         audit_log=audit_log,
     )
     result = await command.execute(dto)
+
+    try:
+        rbac_service.grant_record_access(
+            "contact", PyUUID(result.id), [PyUUID(current_user.user_id)]
+        )
+    except (ValueError, TypeError):
+        pass
+
     return result
 
 
@@ -548,7 +704,7 @@ async def create_contact(
 async def list_contacts(
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
-    current_user: TokenData = Depends(get_current_user),
+    current_user: TokenData = Depends(require_permission(Permission.CONTACTS_VIEW)),
 ):
     query = ListContactsQuery(repository=contact_repo)
     return await query.execute(limit, offset)
@@ -557,7 +713,7 @@ async def list_contacts(
 @app.get("/contacts/{contact_id}", response_model=ContactResponse)
 async def get_contact(
     contact_id: str,
-    current_user: TokenData = Depends(get_current_user),
+    current_user: TokenData = Depends(require_permission(Permission.CONTACTS_VIEW)),
 ):
     query = GetContactQuery(repository=contact_repo)
     result = await query.execute(contact_id)
@@ -569,7 +725,7 @@ async def get_contact(
 @app.get("/accounts/{account_id}/contacts", response_model=List[ContactResponse])
 async def get_account_contacts(
     account_id: str,
-    current_user: TokenData = Depends(get_current_user),
+    current_user: TokenData = Depends(require_permission(Permission.CONTACTS_VIEW)),
 ):
     query = GetContactsByAccountQuery(repository=contact_repo)
     return await query.execute(account_id)
@@ -578,7 +734,9 @@ async def get_account_contacts(
 @app.post("/opportunities", response_model=OpportunityResponse)
 async def create_opportunity(
     request: CreateOpportunityRequest,
-    current_user: TokenData = Depends(require_role(["admin", "manager", "sales_rep"])),
+    current_user: TokenData = Depends(
+        require_permission(Permission.OPPORTUNITIES_CREATE)
+    ),
 ):
     dto = CreateOpportunityDTO(
         account_id=request.account_id,
@@ -598,6 +756,14 @@ async def create_opportunity(
         audit_log=audit_log,
     )
     result = await command.execute(dto)
+
+    try:
+        rbac_service.grant_record_access(
+            "opportunity", PyUUID(result.id), [PyUUID(current_user.user_id)]
+        )
+    except (ValueError, TypeError):
+        pass
+
     return result
 
 
@@ -605,7 +771,9 @@ async def create_opportunity(
 async def list_opportunities(
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
-    current_user: TokenData = Depends(get_current_user),
+    current_user: TokenData = Depends(
+        require_permission(Permission.OPPORTUNITIES_VIEW)
+    ),
 ):
     query = ListOpportunitiesQuery(repository=opportunity_repo)
     return await query.execute(limit, offset)
@@ -614,7 +782,9 @@ async def list_opportunities(
 @app.get("/opportunities/{opportunity_id}", response_model=OpportunityResponse)
 async def get_opportunity(
     opportunity_id: str,
-    current_user: TokenData = Depends(get_current_user),
+    current_user: TokenData = Depends(
+        require_permission(Permission.OPPORTUNITIES_VIEW)
+    ),
 ):
     query = GetOpportunityQuery(repository=opportunity_repo)
     result = await query.execute(opportunity_id)
@@ -625,7 +795,9 @@ async def get_opportunity(
 
 @app.get("/opportunities/open", response_model=List[OpportunityResponse])
 async def get_open_opportunities(
-    current_user: TokenData = Depends(get_current_user),
+    current_user: TokenData = Depends(
+        require_permission(Permission.OPPORTUNITIES_VIEW)
+    ),
 ):
     query = GetOpenOpportunitiesQuery(repository=opportunity_repo)
     return await query.execute()
@@ -637,7 +809,9 @@ async def update_opportunity_stage(
     stage: str,
     user_id: str,
     reason: Optional[str] = None,
-    current_user: TokenData = Depends(require_role(["admin", "manager", "sales_rep"])),
+    current_user: TokenData = Depends(
+        require_permission(Permission.OPPORTUNITIES_EDIT)
+    ),
 ):
     command = UpdateOpportunityStageCommand(
         repository=opportunity_repo,
@@ -651,9 +825,7 @@ async def update_opportunity_stage(
 @app.post("/leads", response_model=LeadResponse)
 async def create_lead(
     request: CreateLeadRequest,
-    current_user: TokenData = Depends(
-        require_role(["admin", "manager", "sales_rep", "marketing_user"])
-    ),
+    current_user: TokenData = Depends(require_permission(Permission.LEADS_CREATE)),
 ):
     dto = CreateLeadDTO(
         first_name=request.first_name,
@@ -672,6 +844,14 @@ async def create_lead(
         audit_log=audit_log,
     )
     result = await command.execute(dto)
+
+    try:
+        rbac_service.grant_record_access(
+            "lead", PyUUID(result.id), [PyUUID(current_user.user_id)]
+        )
+    except (ValueError, TypeError):
+        pass
+
     return result
 
 
@@ -679,7 +859,7 @@ async def create_lead(
 async def list_leads(
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
-    current_user: TokenData = Depends(get_current_user),
+    current_user: TokenData = Depends(require_permission(Permission.LEADS_VIEW)),
 ):
     query = ListLeadsQuery(repository=lead_repo)
     return await query.execute(limit, offset)
@@ -688,7 +868,7 @@ async def list_leads(
 @app.get("/leads/{lead_id}", response_model=LeadResponse)
 async def get_lead(
     lead_id: str,
-    current_user: TokenData = Depends(get_current_user),
+    current_user: TokenData = Depends(require_permission(Permission.LEADS_VIEW)),
 ):
     query = GetLeadQuery(repository=lead_repo)
     result = await query.execute(lead_id)
@@ -701,7 +881,7 @@ async def get_lead(
 async def qualify_lead(
     lead_id: str,
     user_id: str,
-    current_user: TokenData = Depends(require_role(["admin", "manager", "sales_rep"])),
+    current_user: TokenData = Depends(require_permission(Permission.LEADS_CONVERT)),
 ):
     command = QualifyLeadCommand(
         repository=lead_repo,
@@ -715,9 +895,7 @@ async def qualify_lead(
 @app.post("/cases", response_model=CaseResponse)
 async def create_case(
     request: CreateCaseRequest,
-    current_user: TokenData = Depends(
-        require_role(["admin", "manager", "support_user"])
-    ),
+    current_user: TokenData = Depends(require_permission(Permission.CASES_CREATE)),
 ):
     dto = CreateCaseDTO(
         subject=request.subject,
@@ -736,6 +914,14 @@ async def create_case(
         audit_log=audit_log,
     )
     result = await command.execute(dto)
+
+    try:
+        rbac_service.grant_record_access(
+            "case", PyUUID(result.id), [PyUUID(current_user.user_id)]
+        )
+    except (ValueError, TypeError):
+        pass
+
     return result
 
 
@@ -743,7 +929,7 @@ async def create_case(
 async def list_cases(
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
-    current_user: TokenData = Depends(get_current_user),
+    current_user: TokenData = Depends(require_permission(Permission.CASES_VIEW)),
 ):
     query = ListCasesQuery(repository=case_repo)
     return await query.execute(limit, offset)
@@ -752,7 +938,7 @@ async def list_cases(
 @app.get("/cases/{case_id}", response_model=CaseResponse)
 async def get_case(
     case_id: str,
-    current_user: TokenData = Depends(get_current_user),
+    current_user: TokenData = Depends(require_permission(Permission.CASES_VIEW)),
 ):
     query = GetCaseQuery(repository=case_repo)
     result = await query.execute(case_id)
@@ -763,7 +949,7 @@ async def get_case(
 
 @app.get("/cases/open", response_model=List[CaseResponse])
 async def get_open_cases(
-    current_user: TokenData = Depends(get_current_user),
+    current_user: TokenData = Depends(require_permission(Permission.CASES_VIEW)),
 ):
     query = GetOpenCasesQuery(repository=case_repo)
     return await query.execute()
@@ -774,9 +960,7 @@ async def update_case_status(
     case_id: str,
     status: str,
     user_id: str,
-    current_user: TokenData = Depends(
-        require_role(["admin", "manager", "support_user"])
-    ),
+    current_user: TokenData = Depends(require_permission(Permission.CASES_EDIT)),
 ):
     command = UpdateCaseStatusCommand(
         repository=case_repo,
@@ -793,9 +977,7 @@ async def resolve_case(
     resolution_notes: str,
     resolved_by: str,
     user_id: str,
-    current_user: TokenData = Depends(
-        require_role(["admin", "manager", "support_user"])
-    ),
+    current_user: TokenData = Depends(require_permission(Permission.CASES_RESOLVE)),
 ):
     command = ResolveCaseCommand(
         repository=case_repo,

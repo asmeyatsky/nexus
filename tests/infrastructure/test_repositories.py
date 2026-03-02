@@ -5,20 +5,23 @@ Tests for in-memory repository adapters.
 """
 
 import pytest
+from uuid import uuid4
 from domain.entities.account import Account
+from domain.value_objects import Industry, Territory
 
 
 @pytest.mark.asyncio
 async def test_account_save_and_retrieve(account_repo):
     account = Account.create(
-        id="acc-test-1", name="Repo Test Corp",
-        industry="technology", territory="north_america",
-        owner_id="user-1",
+        name="Repo Test Corp",
+        industry=Industry.from_string("technology"),
+        territory=Territory(region="north_america"),
+        owner_id=uuid4(),
     )
     saved = await account_repo.save(account)
-    assert saved.id == "acc-test-1"
+    assert saved.name == "Repo Test Corp"
 
-    retrieved = await account_repo.get_by_id("acc-test-1")
+    retrieved = await account_repo.get_by_id(str(account.id))
     assert retrieved is not None
     assert retrieved.name == "Repo Test Corp"
 
@@ -27,9 +30,10 @@ async def test_account_save_and_retrieve(account_repo):
 async def test_account_get_all(account_repo):
     for i in range(5):
         account = Account.create(
-            id=f"acc-list-{i}", name=f"Corp {i}",
-            industry="finance", territory="europe",
-            owner_id="user-1",
+            name=f"Corp {i}",
+            industry=Industry.from_string("finance"),
+            territory=Territory(region="europe"),
+            owner_id=uuid4(),
         )
         await account_repo.save(account)
 
@@ -40,12 +44,13 @@ async def test_account_get_all(account_repo):
 @pytest.mark.asyncio
 async def test_account_delete(account_repo):
     account = Account.create(
-        id="acc-del-1", name="Delete Me",
-        industry="retail", territory="asia_pacific",
-        owner_id="user-1",
+        name="Delete Me",
+        industry=Industry.from_string("retail"),
+        territory=Territory(region="asia_pacific"),
+        owner_id=uuid4(),
     )
     await account_repo.save(account)
-    await account_repo.delete("acc-del-1")
+    await account_repo.delete(str(account.id))
 
-    retrieved = await account_repo.get_by_id("acc-del-1")
+    retrieved = await account_repo.get_by_id(str(account.id))
     assert retrieved is None

@@ -14,7 +14,6 @@ from uuid import uuid4
 from enum import Enum
 import asyncio
 import json
-import base64
 import threading
 
 
@@ -181,7 +180,7 @@ async def send_email_handler(payload: Dict[str, Any]) -> Dict[str, Any]:
     """Handler for sending emails."""
     to = payload.get("to")
     subject = payload.get("subject")
-    body = payload.get("body")
+    _body = payload.get("body")
 
     print(f"Sending email to {to}: {subject}")
 

@@ -4,8 +4,11 @@ MCP Server Schema Tests
 Tests for MCP server tool schemas and compliance.
 """
 
-import pytest
-from infrastructure.mcp_clients import MCPRequest, MCPResponse, MCPErrorCode, BaseMCPClient
+from infrastructure.mcp_clients import (
+    MCPRequest,
+    MCPResponse,
+    MCPErrorCode,
+)
 
 
 class TestMCPSchemas:

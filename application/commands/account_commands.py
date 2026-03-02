@@ -8,7 +8,6 @@ Architectural Intent:
 """
 
 from dataclasses import dataclass
-from typing import Optional
 from uuid import UUID
 
 from domain import Account, Industry, Territory, Money

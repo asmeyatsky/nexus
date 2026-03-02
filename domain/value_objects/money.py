@@ -9,7 +9,6 @@ Architectural Intent:
 
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import Optional
 
 
 CURRENCY_CODES = {"USD", "GBP", "EUR", "INR", "AED"}

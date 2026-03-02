@@ -8,7 +8,7 @@ Architectural Intent:
 - SSRF protection
 """
 
-from typing import Dict, Any, List, Optional, Callable
+from typing import Dict, Any, List, Optional
 from dataclasses import dataclass, field
 from datetime import datetime
 from uuid import uuid4
@@ -62,6 +62,7 @@ def is_url_safe(url: str) -> tuple[bool, str]:
         except ValueError:
             # Hostname is not an IP — resolve it to check for DNS rebinding
             import socket
+
             try:
                 resolved_ips = socket.getaddrinfo(parsed.hostname, None)
                 for _, _, _, _, addr in resolved_ips:
@@ -248,7 +249,9 @@ class WebhookService:
             if webhook.failure_count >= 10:
                 webhook.is_active = False
 
-    def _generate_signature(self, payload: Dict, secret: str, timestamp: str = "") -> str:
+    def _generate_signature(
+        self, payload: Dict, secret: str, timestamp: str = ""
+    ) -> str:
         import json
 
         body = json.dumps(payload, sort_keys=True)

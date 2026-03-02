@@ -242,20 +242,22 @@ class AuditLogService:
         if format == "json":
             return [
                 {
-                    "id": str(l.id),
-                    "timestamp": l.timestamp.isoformat(),
-                    "action": l.action.value,
-                    "resource_type": l.resource_type.value,
-                    "resource_id": str(l.resource_id) if l.resource_id else None,
-                    "user_id": str(l.user_id) if l.user_id else None,
-                    "user_email": l.user_email,
-                    "org_id": str(l.org_id) if l.org_id else None,
-                    "ip_address": l.ip_address,
-                    "success": l.success,
-                    "changes": l.changes,
-                    "checksum": l.checksum,
+                    "id": str(entry.id),
+                    "timestamp": entry.timestamp.isoformat(),
+                    "action": entry.action.value,
+                    "resource_type": entry.resource_type.value,
+                    "resource_id": str(entry.resource_id)
+                    if entry.resource_id
+                    else None,
+                    "user_id": str(entry.user_id) if entry.user_id else None,
+                    "user_email": entry.user_email,
+                    "org_id": str(entry.org_id) if entry.org_id else None,
+                    "ip_address": entry.ip_address,
+                    "success": entry.success,
+                    "changes": entry.changes,
+                    "checksum": entry.checksum,
                 }
-                for l in logs
+                for entry in logs
             ]
 
         return logs

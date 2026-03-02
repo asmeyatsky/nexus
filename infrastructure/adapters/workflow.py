@@ -12,7 +12,6 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from uuid import uuid4
 from enum import Enum
-import json
 
 
 class WorkflowTriggerType(Enum):
@@ -242,9 +241,11 @@ workflow_engine = WorkflowEngine()
 def _safe_format(template: str, data: Dict) -> str:
     """Safe string formatting that only allows simple key substitution."""
     import re
+
     def replacer(match):
         key = match.group(1)
         return str(data.get(key, match.group(0)))
+
     return re.sub(r"\{(\w+)\}", replacer, template)
 
 
@@ -252,7 +253,7 @@ async def send_email_action(config: Dict, trigger_data: Dict) -> Dict:
     """Send email action handler."""
     to = _safe_format(config.get("to", ""), trigger_data)
     subject = _safe_format(config.get("subject", ""), trigger_data)
-    body = _safe_format(config.get("body", ""), trigger_data)
+    _body = _safe_format(config.get("body", ""), trigger_data)
 
     print(f"Sending email to {to}: {subject}")
 
@@ -262,8 +263,8 @@ async def send_email_action(config: Dict, trigger_data: Dict) -> Dict:
 async def create_task_action(config: Dict, trigger_data: Dict) -> Dict:
     """Create task action handler."""
     subject = _safe_format(config.get("subject", ""), trigger_data)
-    due_date = config.get("due_date", "")
-    owner_id = config.get("owner_id", "")
+    _due_date = config.get("due_date", "")
+    _owner_id = config.get("owner_id", "")
 
     print(f"Creating task: {subject}")
 

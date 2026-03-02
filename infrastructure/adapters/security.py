@@ -8,13 +8,12 @@ Architectural Intent:
 """
 
 from typing import Dict, Optional, Set
-from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from dataclasses import dataclass
+from datetime import datetime
 from enum import Enum
 import time
 import threading
 from collections import defaultdict
-import hashlib
 
 
 class RateLimitTier(Enum):
@@ -70,9 +69,11 @@ class RateLimiter:
     ) -> tuple[bool, Dict]:
         config = self._config.get(identifier)
         if not config:
+            limits = RATE_LIMITS[RateLimitTier.FREE]
             config = RateLimitConfig(
-                requests=RATE_LIMITS[RateLimitTier.FREE]["requests"],
-                window=RATE_LIMITS[RateLimitTier.FREE]["window"],
+                requests=limits["requests"],
+                window=limits["window"],
+                burst=limits["requests"] * 2,
             )
 
         bucket_key = f"{org_id}:{identifier}" if org_id else identifier

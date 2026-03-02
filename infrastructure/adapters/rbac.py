@@ -188,10 +188,10 @@ class UserProfile:
 class SharingRule:
     id: UUID
     record_type: str
+    org_id: UUID
     role_id: Optional[UUID] = None
     user_id: Optional[UUID] = None
     team_id: Optional[UUID] = None
-    org_id: UUID
     access_level: str = "read"
     related_org_id: Optional[UUID] = None
 

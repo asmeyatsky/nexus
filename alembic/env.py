@@ -1,10 +1,14 @@
 """Alembic migration environment."""
 
 import os
+import sys
 from logging.config import fileConfig
 
 from sqlalchemy import engine_from_config, pool
 from alembic import context
+
+# Add project root to path so we can import infrastructure modules
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 config = context.config
 
@@ -16,7 +20,12 @@ database_url = os.environ.get("DATABASE_URL", "")
 if database_url:
     config.set_main_option("sqlalchemy.url", database_url)
 
-target_metadata = None
+# Import all models so Alembic sees them
+from infrastructure.database import (  # noqa: E402
+    Base,
+)
+
+target_metadata = Base.metadata
 
 
 def run_migrations_offline() -> None:

@@ -13,6 +13,7 @@ Key Design Decisions:
 """
 
 from typing import Protocol, Optional, List
+from datetime import datetime
 from uuid import UUID
 
 from domain.entities import Account, Contact, Opportunity, Lead, Case
@@ -108,6 +109,3 @@ class CaseRepositoryPort(Protocol):
     async def get_open_cases(self) -> List[Case]: ...
 
     async def delete(self, case_id: UUID) -> None: ...
-
-
-from datetime import datetime

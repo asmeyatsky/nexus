@@ -8,7 +8,6 @@ Architectural Intent:
 """
 
 import os
-from typing import Optional
 from functools import lru_cache
 from pydantic_settings import BaseSettings
 

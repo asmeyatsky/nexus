@@ -7,8 +7,8 @@ Architectural Intent:
 - No infrastructure dependencies
 """
 
-from typing import List, Dict, Optional
-from domain.entities import Account, Lead, Opportunity, Product, Quote
+from typing import List, Dict
+from domain.entities import Account, Lead, Opportunity
 
 
 class PricingService:
@@ -21,7 +21,9 @@ class PricingService:
 
     def calculate_quote_total(self, line_items: list) -> float:
         return sum(
-            self.calculate_line_total(item.unit_price, item.quantity, item.discount_percent)
+            self.calculate_line_total(
+                item.unit_price, item.quantity, item.discount_percent
+            )
             for item in line_items
         )
 
@@ -46,8 +48,8 @@ class DeduplicationService:
         if not a or not b:
             return 0.0
         # Simple Jaccard similarity on character bigrams
-        bigrams_a = set(a[i:i+2] for i in range(len(a) - 1))
-        bigrams_b = set(b[i:i+2] for i in range(len(b) - 1))
+        bigrams_a = set(a[i : i + 2] for i in range(len(a) - 1))
+        bigrams_b = set(b[i : i + 2] for i in range(len(b) - 1))
         if not bigrams_a or not bigrams_b:
             return 0.0
         intersection = bigrams_a & bigrams_b
@@ -93,7 +95,7 @@ class ForecastingService:
         for opp in opportunities:
             if opp.is_closed:
                 continue
-            stage = opp.stage.value if hasattr(opp.stage, 'value') else str(opp.stage)
+            stage = opp.stage.value if hasattr(opp.stage, "value") else str(opp.stage)
             if stage not in stages:
                 stages[stage] = {"count": 0, "total": 0.0, "weighted": 0.0}
             stages[stage]["count"] += 1

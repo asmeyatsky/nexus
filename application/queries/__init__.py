@@ -140,7 +140,7 @@ class ListLeadsQuery:
 
     async def execute(self, limit: int = 100, offset: int = 0) -> List[LeadDTO]:
         leads = await self.repository.get_all(limit, offset)
-        return [LeadDTO.from_entity(l) for l in leads]
+        return [LeadDTO.from_entity(lead) for lead in leads]
 
 
 @dataclass

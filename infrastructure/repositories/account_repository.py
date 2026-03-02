@@ -14,7 +14,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from domain import Account, Industry, Territory, Money
-from domain.ports.repository_ports import AccountRepositoryPort
 from infrastructure.database import AccountModel
 
 

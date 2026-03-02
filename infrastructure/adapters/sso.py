@@ -6,18 +6,17 @@ Architectural Intent:
 - SAML 2.0 protocol support with signature verification
 - Session management with secure tokens
 - XXE protection
+- CSRF protection for cookie-based sessions
 """
 
 from typing import Optional, Dict, Any, List
 from dataclasses import dataclass
 from enum import Enum
-import hashlib
 import secrets
 import time
 import ipaddress
 
-from pydantic import BaseModel
-from fastapi import HTTPException, Request, Response
+from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from infrastructure.config.settings import settings
@@ -70,24 +69,27 @@ def is_ip_blocked(ip_str: str) -> bool:
 
 
 class SSOSession:
-    """Secure SSO session management."""
+    """Secure SSO session management with CSRF protection."""
 
     def __init__(self):
         self._sessions: Dict[str, Dict[str, Any]] = {}
 
     def create_session(
         self, user_id: str, email: str, provider: SSOProvider, org_id: str
-    ) -> str:
+    ) -> tuple[str, str]:
+        """Create session and return (session_id, csrf_token)."""
         session_id = secrets.token_urlsafe(32)
+        csrf_token = secrets.token_urlsafe(32)
         self._sessions[session_id] = {
             "user_id": user_id,
             "email": email,
             "provider": provider.value,
             "org_id": org_id,
+            "csrf_token": csrf_token,
             "created_at": time.time(),
             "last_activity": time.time(),
         }
-        return session_id
+        return session_id, csrf_token
 
     def validate_session(
         self, session_id: str, max_age: int = 1800
@@ -102,6 +104,13 @@ class SSOSession:
 
         session["last_activity"] = time.time()
         return session
+
+    def validate_csrf(self, session_id: str, csrf_token: str) -> bool:
+        """Validate CSRF token against session."""
+        session = self._sessions.get(session_id)
+        if not session:
+            return False
+        return secrets.compare_digest(session.get("csrf_token", ""), csrf_token)
 
     def destroy_session(self, session_id: str):
         self._sessions.pop(session_id, None)
@@ -253,8 +262,11 @@ class GoogleSSOHandler:
             return None
 
 
+STATE_CHANGING_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+
+
 class SSOMiddleware(BaseHTTPMiddleware):
-    """Middleware for SSO session validation."""
+    """Middleware for SSO session validation with CSRF protection."""
 
     def __init__(self, app, sso_session: SSOSession, excluded_paths: List[str] = None):
         super().__init__(app)
@@ -282,6 +294,18 @@ class SSOMiddleware(BaseHTTPMiddleware):
         if session_id:
             session = self.sso_session.validate_session(session_id)
             if session:
+                # CSRF validation for state-changing requests
+                if request.method in STATE_CHANGING_METHODS:
+                    csrf_token = request.headers.get("X-CSRF-Token")
+                    if not csrf_token or not self.sso_session.validate_csrf(
+                        session_id, csrf_token
+                    ):
+                        return Response(
+                            status_code=403,
+                            content='{"detail":"CSRF validation failed"}',
+                            media_type="application/json",
+                        )
+
                 request.state.user = session
                 return await call_next(request)
 

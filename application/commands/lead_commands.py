@@ -9,7 +9,7 @@ Architectural Intent:
 from dataclasses import dataclass
 from uuid import UUID
 
-from domain import Lead, LeadStatus, LeadRating, Email, PhoneNumber
+from domain import Lead, LeadStatus, Email, PhoneNumber
 from domain.ports.repository_ports import (
     LeadRepositoryPort,
     AccountRepositoryPort,

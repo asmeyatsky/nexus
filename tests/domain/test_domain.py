@@ -12,10 +12,10 @@ from uuid import uuid4
 
 from domain.entities.account import Account
 from domain.entities.contact import Contact
-from domain.entities.opportunity import Opportunity, OpportunityStage, OpportunitySource
+from domain.entities.opportunity import Opportunity, OpportunityStage
 from domain.entities.lead import Lead, LeadStatus, LeadRating
-from domain.entities.case import Case, CaseStatus, CasePriority, CaseOrigin
-from domain.value_objects import Industry, Territory, Money, Email, PhoneNumber
+from domain.entities.case import Case, CaseStatus, CasePriority
+from domain.value_objects import Industry, Territory, Money, Email
 
 
 class TestAccount:

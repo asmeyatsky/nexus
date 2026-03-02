@@ -7,11 +7,11 @@ Architectural Intent:
 - Custom report builder
 """
 
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import Enum
-import json
+from uuid import uuid4
 
 
 class ReportType(Enum):
@@ -36,20 +36,21 @@ class ReportDefinition:
 
 class BigQueryReporter:
     """BigQuery analytics integration."""
-    
+
     def __init__(self, project_id: str = None):
         self.project_id = project_id
         self._client = None
         self._datasets = {}
-    
+
     async def initialize(self):
         """Initialize BigQuery client."""
         if not self.project_id:
             print("BigQuery: Running in mock mode")
             return
-        
+
         try:
             from google.cloud import bigquery
+
             self._client = bigquery.Client(project=self.project_id)
             self._datasets = {
                 "events": "nexus_analytics.events",
@@ -58,25 +59,25 @@ class BigQueryReporter:
             }
         except Exception as e:
             print(f"BigQuery initialization error: {e}")
-    
+
     async def export_events(self, events: List[Dict]):
         """Export events to BigQuery."""
         if not self._client:
             print(f"BigQuery mock: Exporting {len(events)} events")
             return
-        
+
         table = f"{self.project_id}.nexus_analytics.events"
         errors = self._client.insert_rows_json(table, events)
-        
+
         if errors:
             print(f"BigQuery insert errors: {errors}")
-    
+
     async def run_query(self, query: str, params: List = None) -> List[Dict]:
         """Execute a parameterized query."""
         if not self._client:
             return []
 
-        from google.cloud.bigquery import QueryJobConfig, ScalarQueryParameter
+        from google.cloud.bigquery import QueryJobConfig
 
         job_config = QueryJobConfig()
         if params:
@@ -86,7 +87,7 @@ class BigQueryReporter:
         results = query_job.result()
 
         return [dict(row) for row in results]
-    
+
     async def get_pipeline_summary(
         self,
         org_id: str,
@@ -120,7 +121,7 @@ class BigQueryReporter:
             "period": {"start": start_date.isoformat(), "end": end_date.isoformat()},
             "by_stage": results,
         }
-    
+
     async def get_forecast(
         self,
         org_id: str,
@@ -149,15 +150,15 @@ class BigQueryReporter:
         ]
 
         results = await self.run_query(query, params)
-        
+
         total_pipeline = sum(r.get("pipeline", 0) for r in results)
-        
+
         return {
             "forecast": results,
             "total_pipeline": total_pipeline,
             "weighted_value": total_pipeline * 0.4,
         }
-    
+
     async def get_activity_report(
         self,
         org_id: str,
@@ -197,7 +198,7 @@ class BigQueryReporter:
             "period_days": days,
             "activities": results,
         }
-    
+
     async def get_conversion_funnel(
         self,
         org_id: str,
@@ -236,7 +237,7 @@ class BigQueryReporter:
         results = await self.run_query(query, params)
 
         return {"funnel": results}
-    
+
     def create_report(
         self,
         name: str,
@@ -247,7 +248,7 @@ class BigQueryReporter:
         filters: Dict[str, Any] = None,
     ) -> ReportDefinition:
         """Create a custom report definition."""
-        
+
         report = ReportDefinition(
             id=str(uuid4()),
             name=name,
@@ -258,18 +259,32 @@ class BigQueryReporter:
             group_by=dimensions[:2] if dimensions else [],
             org_id=org_id,
         )
-        
+
         return report
-    
+
     _ALLOWED_COLUMNS = {
-        "stage", "status", "type", "source", "owner_id", "priority",
-        "industry", "territory", "channel", "campaign_id", "rating",
-        "amount", "count", "revenue", "cost", "probability",
+        "stage",
+        "status",
+        "type",
+        "source",
+        "owner_id",
+        "priority",
+        "industry",
+        "territory",
+        "channel",
+        "campaign_id",
+        "rating",
+        "amount",
+        "count",
+        "revenue",
+        "cost",
+        "probability",
     }
 
     def _sanitize_column(self, col: str) -> str:
         """Only allow whitelisted column names to prevent SQL injection."""
         import re
+
         col = col.strip()
         if col not in self._ALLOWED_COLUMNS or not re.match(r"^[a-z_]+$", col):
             raise ValueError(f"Invalid column name: {col}")
@@ -307,7 +322,5 @@ class BigQueryReporter:
             "data": results,
         }
 
-
-from uuid import uuid4
 
 bigquery_reporter = BigQueryReporter()

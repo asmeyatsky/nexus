@@ -8,7 +8,6 @@ Architectural Intent:
 """
 
 from typing import Protocol, Optional, Any
-from datetime import datetime
 
 
 class NotificationPort(Protocol):

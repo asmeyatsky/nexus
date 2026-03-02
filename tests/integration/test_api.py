@@ -5,6 +5,7 @@ Tests for REST API endpoints.
 """
 
 import os
+
 os.environ["JWT_SECRET_KEY"] = "test-secret-key-for-testing-only"
 os.environ["DATABASE_URL"] = "sqlite:///test.db"
 os.environ["ENVIRONMENT"] = "test"
@@ -14,10 +15,12 @@ from httpx import AsyncClient, ASGITransport
 from presentation.api.main import app
 from infrastructure.adapters.auth import create_access_token
 
+TEST_USER_ID = "00000000-0000-0000-0000-000000000001"
+
 
 def _get_auth_headers(role: str = "admin") -> dict:
     token = create_access_token(
-        data={"sub": "test-user", "email": "test@example.com", "role": role}
+        data={"sub": TEST_USER_ID, "email": "test@example.com", "role": role}
     )
     return {"Authorization": f"Bearer {token}"}
 
@@ -43,10 +46,15 @@ async def test_root_endpoint():
 async def test_create_account_requires_auth():
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        response = await client.post("/accounts", json={
-            "name": "Test", "industry": "technology",
-            "territory": "north_america", "owner_id": "u1",
-        })
+        response = await client.post(
+            "/accounts",
+            json={
+                "name": "Test",
+                "industry": "technology",
+                "territory": "north_america",
+                "owner_id": TEST_USER_ID,
+            },
+        )
         assert response.status_code == 403
 
 
@@ -60,7 +68,7 @@ async def test_create_account_with_auth():
                 "name": "Auth Test Corp",
                 "industry": "technology",
                 "territory": "north_america",
-                "owner_id": "user-1",
+                "owner_id": TEST_USER_ID,
             },
             headers=_get_auth_headers("admin"),
         )

@@ -13,7 +13,6 @@ from datetime import datetime
 from uuid import uuid4
 from enum import Enum
 import asyncio
-import json
 import csv
 import io
 
@@ -178,7 +177,6 @@ bulk_api = BulkAPI()
 async def bulk_import_accounts_handler(record: Dict[str, Any]) -> Dict:
     """Handler for bulk importing accounts."""
     from infrastructure.mcp_servers.nexus_crm_server import InMemoryAccountRepository
-    from application import CreateAccountCommand, CreateAccountDTO
     from domain import Account, Industry, Territory
     from uuid import UUID
 

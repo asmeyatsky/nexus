@@ -40,7 +40,9 @@ class AccountHealthScore:
         support_score: int,
         org_id: str,
     ) -> "AccountHealthScore":
-        overall = int(engagement_score * 0.4 + revenue_score * 0.35 + support_score * 0.25)
+        overall = int(
+            engagement_score * 0.4 + revenue_score * 0.35 + support_score * 0.25
+        )
         if overall >= 80:
             grade = HealthGrade.EXCELLENT
         elif overall >= 60:

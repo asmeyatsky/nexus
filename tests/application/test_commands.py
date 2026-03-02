@@ -5,7 +5,6 @@ Tests for CQRS command handlers.
 """
 
 import pytest
-import asyncio
 
 from application import (
     CreateAccountCommand,
@@ -18,6 +17,8 @@ from application import (
     CreateCaseDTO,
 )
 
+TEST_USER_ID = "00000000-0000-0000-0000-000000000001"
+
 
 @pytest.mark.asyncio
 async def test_create_account(account_repo, event_bus, audit_log):
@@ -25,7 +26,7 @@ async def test_create_account(account_repo, event_bus, audit_log):
         name="Test Corp",
         industry="technology",
         territory="north_america",
-        owner_id="user-1",
+        owner_id=TEST_USER_ID,
     )
     command = CreateAccountCommand(
         repository=account_repo,
@@ -34,18 +35,22 @@ async def test_create_account(account_repo, event_bus, audit_log):
     )
     result = await command.execute(dto)
     assert result.name == "Test Corp"
-    assert result.industry == "technology"
+    assert result.industry == "Technology"
 
 
 @pytest.mark.asyncio
 async def test_create_contact(account_repo, contact_repo, event_bus, audit_log):
     # First create an account
     acc_dto = CreateAccountDTO(
-        name="Parent Corp", industry="finance",
-        territory="europe", owner_id="user-1",
+        name="Parent Corp",
+        industry="finance",
+        territory="europe",
+        owner_id=TEST_USER_ID,
     )
     acc_cmd = CreateAccountCommand(
-        repository=account_repo, event_bus=event_bus, audit_log=audit_log,
+        repository=account_repo,
+        event_bus=event_bus,
+        audit_log=audit_log,
     )
     account = await acc_cmd.execute(acc_dto)
 
@@ -54,7 +59,7 @@ async def test_create_contact(account_repo, contact_repo, event_bus, audit_log):
         first_name="John",
         last_name="Doe",
         email="john@example.com",
-        owner_id="user-1",
+        owner_id=TEST_USER_ID,
     )
     command = CreateContactCommand(
         repository=contact_repo,
@@ -74,7 +79,7 @@ async def test_create_lead(lead_repo, event_bus, audit_log):
         last_name="Smith",
         email="jane@company.com",
         company="Company Inc",
-        owner_id="user-1",
+        owner_id=TEST_USER_ID,
     )
     command = CreateLeadCommand(
         repository=lead_repo,
@@ -90,11 +95,15 @@ async def test_create_lead(lead_repo, event_bus, audit_log):
 async def test_create_case(account_repo, case_repo, event_bus, audit_log):
     # Create account first
     acc_dto = CreateAccountDTO(
-        name="Case Corp", industry="healthcare",
-        territory="asia_pacific", owner_id="user-1",
+        name="Case Corp",
+        industry="healthcare",
+        territory="asia_pacific",
+        owner_id=TEST_USER_ID,
     )
     acc_cmd = CreateAccountCommand(
-        repository=account_repo, event_bus=event_bus, audit_log=audit_log,
+        repository=account_repo,
+        event_bus=event_bus,
+        audit_log=audit_log,
     )
     account = await acc_cmd.execute(acc_dto)
 
@@ -102,7 +111,7 @@ async def test_create_case(account_repo, case_repo, event_bus, audit_log):
         subject="Login issue",
         description="Cannot login to the system",
         account_id=account.id,
-        owner_id="user-1",
+        owner_id=TEST_USER_ID,
         case_number="CASE-001",
         priority="high",
         origin="web",

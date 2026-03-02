@@ -1,11 +1,17 @@
 """
-Nexus CRM MCP Server
+Nexus CRM MCP Server (Unified Facade)
 
 Architectural Intent:
 - MCP server exposing CRM domain capabilities
 - Tools for write operations (commands)
 - Resources for read operations (queries)
 - Follows skill2026 MCP patterns
+- Serves as a unified facade; all functionality is also available via
+  dedicated per-context servers for finer-grained deployment:
+    - sales_server.py      -- Opportunities, Pipeline operations
+    - accounts_server.py   -- Accounts, Contacts, Relationships
+    - marketing_server.py  -- Leads, Campaigns
+    - support_server.py    -- Cases, Knowledge Articles, CSAT
 
 MCP Integration:
 - Exposed as 'nexus-crm' MCP server
@@ -13,38 +19,27 @@ MCP Integration:
 - Resources: account://{id}, opportunity://{id}, etc.
 """
 
-from typing import Any
 from datetime import datetime
 
 from mcp.server import Server
-from mcp.types import Tool, Resource
 from mcp.server.stdio import stdio_server
 
 from application import (
     CreateAccountCommand,
     UpdateAccountCommand,
-    DeactivateAccountCommand,
     CreateContactCommand,
-    UpdateContactCommand,
     CreateOpportunityCommand,
     UpdateOpportunityStageCommand,
-    UpdateOpportunityCommand,
     CreateLeadCommand,
     QualifyLeadCommand,
-    ConvertLeadCommand,
     CreateCaseCommand,
-    UpdateCaseStatusCommand,
     ResolveCaseCommand,
-    CloseCaseCommand,
     GetAccountQuery,
     ListAccountsQuery,
-    GetAccountsByOwnerQuery,
     GetContactQuery,
     ListContactsQuery,
-    GetContactsByAccountQuery,
     GetOpportunityQuery,
     ListOpportunitiesQuery,
-    GetOpportunitiesByAccountQuery,
     GetOpenOpportunitiesQuery,
     GetLeadQuery,
     ListLeadsQuery,
@@ -446,12 +441,10 @@ class NexusCRMMCPServer:
             return json.dumps([r.__dict__ for r in results])
 
     def _get_account_repo(self):
-        from infrastructure.repositories.account_repository import AccountRepository
 
         return InMemoryAccountRepository()
 
     def _get_contact_repo(self):
-        from infrastructure.repositories.contact_repository import ContactRepository
 
         return InMemoryContactRepository()
 
@@ -476,7 +469,6 @@ class InMemoryAccountRepository:
         return account
 
     async def get_by_id(self, account_id):
-        from uuid import UUID
 
         return self._accounts.get(str(account_id))
 
@@ -490,7 +482,6 @@ class InMemoryAccountRepository:
         return list(self._accounts.values())[offset : offset + limit]
 
     async def get_by_owner(self, owner_id):
-        from uuid import UUID
 
         return [a for a in self._accounts.values() if str(a.owner_id) == str(owner_id)]
 
@@ -521,7 +512,6 @@ class InMemoryContactRepository:
         return None
 
     async def get_by_account(self, account_id):
-        from uuid import UUID
 
         return [
             c for c in self._contacts.values() if str(c.account_id) == str(account_id)
@@ -605,18 +595,20 @@ class InMemoryLeadRepository:
         return list(self._leads.values())[offset : offset + limit]
 
     async def get_by_status(self, status):
-        return [l for l in self._leads.values() if l.status.value == status]
+        return [lead for lead in self._leads.values() if lead.status.value == status]
 
     async def get_by_owner(self, owner_id):
-        return [l for l in self._leads.values() if str(l.owner_id) == str(owner_id)]
+        return [
+            lead for lead in self._leads.values() if str(lead.owner_id) == str(owner_id)
+        ]
 
     async def get_unqualified_leads(self):
         from domain.entities.lead import LeadStatus
 
         return [
-            l
-            for l in self._leads.values()
-            if l.status not in (LeadStatus.CONVERTED, LeadStatus.UNQUALIFIED)
+            lead
+            for lead in self._leads.values()
+            if lead.status not in (LeadStatus.CONVERTED, LeadStatus.UNQUALIFIED)
         ]
 
     async def delete(self, lead_id):

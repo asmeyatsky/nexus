@@ -8,7 +8,7 @@ Architectural Intent:
 """
 
 import asyncio
-from typing import Dict, Any, Callable, List, Set, Optional
+from typing import Dict, Any, Callable, Set, Optional
 from dataclasses import dataclass, field
 
 
@@ -47,20 +47,16 @@ class DAGOrchestrator:
         while pending:
             # Find nodes whose dependencies are all satisfied
             ready = [
-                name for name in pending
+                name
+                for name in pending
                 if self._nodes[name].depends_on.issubset(completed)
             ]
 
             if not ready:
-                raise RuntimeError(
-                    f"Circular dependency detected. Pending: {pending}"
-                )
+                raise RuntimeError(f"Circular dependency detected. Pending: {pending}")
 
             # Execute ready nodes in parallel
-            tasks = [
-                self._execute_node(name, context, results)
-                for name in ready
-            ]
+            tasks = [self._execute_node(name, context, results) for name in ready]
             node_results = await asyncio.gather(*tasks, return_exceptions=True)
 
             for name, result in zip(ready, node_results):

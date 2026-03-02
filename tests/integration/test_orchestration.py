@@ -44,6 +44,7 @@ async def test_parallel_execution():
             await asyncio.sleep(delay)
             execution_order.append(f"{name}_end")
             return name
+
         return handler
 
     dag.add_node("fast", await node("fast", 0.01))

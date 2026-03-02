@@ -8,6 +8,21 @@ Architectural Intent:
 """
 
 import os
+import uuid
+from datetime import datetime
+
+from sqlalchemy import (
+    Column,
+    String,
+    Integer,
+    Boolean,
+    DateTime,
+    Text,
+    Numeric,
+    ForeignKey,
+    JSON,
+)
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.ext.asyncio import (
     create_async_engine,
     AsyncSession,
@@ -39,6 +54,7 @@ class AccountModel(Base):
     __tablename__ = "accounts"
 
     id = Column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    org_id = Column(PGUUID(as_uuid=True), nullable=False, index=True)
     name = Column(String(255), nullable=False)
     industry = Column(String(100), nullable=False)
     territory = Column(String(100), nullable=False)
@@ -51,18 +67,15 @@ class AccountModel(Base):
     owner_id = Column(PGUUID(as_uuid=True), nullable=False)
     parent_account_id = Column(PGUUID(as_uuid=True), ForeignKey("accounts.id"))
     is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=lambda: __import__("datetime").datetime.now())
-    updated_at = Column(
-        DateTime,
-        default=lambda: __import__("datetime").datetime.now(),
-        onupdate=lambda: __import__("datetime").datetime.now(),
-    )
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
 class ContactModel(Base):
     __tablename__ = "contacts"
 
     id = Column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    org_id = Column(PGUUID(as_uuid=True), nullable=False, index=True)
     account_id = Column(PGUUID(as_uuid=True), ForeignKey("accounts.id"), nullable=False)
     first_name = Column(String(100), nullable=False)
     last_name = Column(String(100), nullable=False)
@@ -72,18 +85,15 @@ class ContactModel(Base):
     department = Column(String(100))
     owner_id = Column(PGUUID(as_uuid=True), nullable=False)
     is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=lambda: __import__("datetime").datetime.now())
-    updated_at = Column(
-        DateTime,
-        default=lambda: __import__("datetime").datetime.now(),
-        onupdate=lambda: __import__("datetime").datetime.now(),
-    )
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
 class OpportunityModel(Base):
     __tablename__ = "opportunities"
 
     id = Column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    org_id = Column(PGUUID(as_uuid=True), nullable=False, index=True)
     account_id = Column(PGUUID(as_uuid=True), ForeignKey("accounts.id"), nullable=False)
     name = Column(String(255), nullable=False)
     stage = Column(String(50), nullable=False)
@@ -97,18 +107,15 @@ class OpportunityModel(Base):
     description = Column(Text)
     is_active = Column(Boolean, default=True)
     closed_at = Column(DateTime)
-    created_at = Column(DateTime, default=lambda: __import__("datetime").datetime.now())
-    updated_at = Column(
-        DateTime,
-        default=lambda: __import__("datetime").datetime.now(),
-        onupdate=lambda: __import__("datetime").datetime.now(),
-    )
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
 class LeadModel(Base):
     __tablename__ = "leads"
 
     id = Column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    org_id = Column(PGUUID(as_uuid=True), nullable=False, index=True)
     first_name = Column(String(100), nullable=False)
     last_name = Column(String(100), nullable=False)
     email = Column(String(255), nullable=False)
@@ -126,18 +133,15 @@ class LeadModel(Base):
         PGUUID(as_uuid=True), ForeignKey("opportunities.id")
     )
     converted_at = Column(DateTime)
-    created_at = Column(DateTime, default=lambda: __import__("datetime").datetime.now())
-    updated_at = Column(
-        DateTime,
-        default=lambda: __import__("datetime").datetime.now(),
-        onupdate=lambda: __import__("datetime").datetime.now(),
-    )
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
 class CaseModel(Base):
     __tablename__ = "cases"
 
     id = Column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    org_id = Column(PGUUID(as_uuid=True), nullable=False, index=True)
     case_number = Column(String(50), unique=True, nullable=False)
     subject = Column(String(255), nullable=False)
     description = Column(Text, nullable=False)
@@ -151,12 +155,23 @@ class CaseModel(Base):
     resolved_by = Column(String(100))
     resolved_at = Column(DateTime)
     closed_at = Column(DateTime)
-    created_at = Column(DateTime, default=lambda: __import__("datetime").datetime.now())
-    updated_at = Column(
-        DateTime,
-        default=lambda: __import__("datetime").datetime.now(),
-        onupdate=lambda: __import__("datetime").datetime.now(),
-    )
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class UserModel(Base):
+    __tablename__ = "users"
+
+    id = Column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    org_id = Column(PGUUID(as_uuid=True), nullable=False, index=True)
+    email = Column(String(255), nullable=False, unique=True)
+    name = Column(String(255), nullable=False)
+    hashed_password = Column(String(255), nullable=False)
+    role = Column(String(50), nullable=False, default="user")
+    is_active = Column(Boolean, default=True)
+    password_history = Column(JSON, default=list)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
 async def init_db():

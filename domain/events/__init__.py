@@ -9,7 +9,6 @@ Architectural Intent:
 
 from dataclasses import dataclass, field
 from datetime import datetime, UTC
-from typing import Any
 
 
 @dataclass(frozen=True)
