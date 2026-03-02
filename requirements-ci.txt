@@ -22,6 +22,9 @@ redis>=5.0.0
 # XML Security
 defusedxml>=0.7.0
 
+# MCP
+mcp>=1.0.0
+
 # HTTP clients
 httpx>=0.25.0
 
