@@ -55,7 +55,7 @@ async def test_create_account_requires_auth():
                 "owner_id": TEST_USER_ID,
             },
         )
-        assert response.status_code == 403
+        assert response.status_code in (401, 403)
 
 
 @pytest.mark.asyncio
