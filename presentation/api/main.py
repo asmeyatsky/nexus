@@ -17,7 +17,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Depends, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from pydantic import BaseModel, EmailStr, Field, validator, constr
+from pydantic import BaseModel, EmailStr, Field, field_validator, constr
 from datetime import datetime, timedelta, timezone
 
 from infrastructure.adapters.auth import (
@@ -33,14 +33,19 @@ from infrastructure.config.settings import settings
 from application import (
     CreateAccountCommand,
     UpdateAccountCommand,
+    DeactivateAccountCommand,
     CreateContactCommand,
+    UpdateContactCommand,
     CreateOpportunityCommand,
     UpdateOpportunityStageCommand,
+    UpdateOpportunityCommand,
     CreateLeadCommand,
     QualifyLeadCommand,
+    ConvertLeadCommand,
     CreateCaseCommand,
     UpdateCaseStatusCommand,
     ResolveCaseCommand,
+    CloseCaseCommand,
     GetAccountQuery,
     ListAccountsQuery,
     GetContactQuery,
@@ -60,17 +65,7 @@ from application import (
     CreateLeadDTO,
     CreateCaseDTO,
 )
-from infrastructure.mcp_servers.nexus_crm_server import (
-    InMemoryAccountRepository,
-    InMemoryContactRepository,
-    InMemoryOpportunityRepository,
-    InMemoryLeadRepository,
-    InMemoryCaseRepository,
-)
-from infrastructure.adapters import (
-    InMemoryEventBusAdapter,
-    ConsoleAuditLogAdapter,
-)
+from infrastructure.config.dependency_injection import container
 from infrastructure.adapters.security import (
     SecurityMiddleware,
     rate_limiter,
@@ -82,6 +77,13 @@ from infrastructure.adapters.rbac import (
     RoleType,
     rbac_service,
 )
+from infrastructure.adapters.monitoring import (
+    TracingMiddleware,
+    HealthChecker,
+    metrics,
+    setup_logging,
+)
+from starlette.responses import Response
 
 logger = logging.getLogger(__name__)
 
@@ -89,6 +91,19 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application startup/shutdown lifecycle."""
+    setup_logging()
+
+    # Initialize DB session for container if using database
+    if container._use_database:
+        try:
+            from infrastructure.database import async_session
+
+            logger.info("Database mode enabled — using SQLAlchemy repositories")
+        except Exception as e:
+            logger.warning(f"Database init failed, falling back to in-memory: {e}")
+    else:
+        logger.info("In-memory mode — no DATABASE_URL configured")
+
     # Register event subscribers at startup
     try:
         from application.event_handlers import register_all_subscribers
@@ -98,6 +113,9 @@ async def lifespan(app: FastAPI):
     except ImportError:
         pass
     yield
+
+
+health_checker = HealthChecker(version="1.0.0")
 
 
 app = FastAPI(
@@ -123,6 +141,7 @@ if settings.cors_allowed_origins:
 app.add_middleware(
     SecurityMiddleware, rate_limiter=rate_limiter, ip_security=ip_security
 )
+app.add_middleware(TracingMiddleware)
 rate_limiter.configure("default", RateLimitTier.STANDARD)
 ip_security.enable()
 
@@ -365,13 +384,13 @@ async def change_password(
     return {"message": "Password changed successfully"}
 
 
-account_repo = InMemoryAccountRepository()
-contact_repo = InMemoryContactRepository()
-opportunity_repo = InMemoryOpportunityRepository()
-lead_repo = InMemoryLeadRepository()
-case_repo = InMemoryCaseRepository()
-event_bus = InMemoryEventBusAdapter()
-audit_log = ConsoleAuditLogAdapter()
+account_repo = container.account_repository()
+contact_repo = container.contact_repository()
+opportunity_repo = container.opportunity_repository()
+lead_repo = container.lead_repository()
+case_repo = container.case_repository()
+event_bus = container.event_bus()
+audit_log = container.audit_log()
 
 
 class AccountResponse(BaseModel):
@@ -427,14 +446,16 @@ class CreateAccountRequest(BaseModel):
     currency: constr(max_length=10) = "USD"
     employee_count: Optional[int] = Field(None, ge=0)
 
-    @validator("industry")
-    def validate_industry(cls, v):
+    @field_validator("industry")
+    @classmethod
+    def validate_industry(cls, v: str) -> str:
         if v not in INDUSTRIES:
             raise ValueError(f"Industry must be one of: {', '.join(INDUSTRIES)}")
         return v
 
-    @validator("territory")
-    def validate_territory(cls, v):
+    @field_validator("territory")
+    @classmethod
+    def validate_territory(cls, v: str) -> str:
         if v not in TERRITORIES:
             raise ValueError(f"Territory must be one of: {', '.join(TERRITORIES)}")
         return v
@@ -557,14 +578,16 @@ class CreateCaseRequest(BaseModel):
     priority: str = "medium"
     origin: str = "web"
 
-    @validator("priority")
-    def validate_priority(cls, v):
+    @field_validator("priority")
+    @classmethod
+    def validate_priority(cls, v: str) -> str:
         if v not in PRIORITIES:
             raise ValueError(f"Priority must be one of: {', '.join(PRIORITIES)}")
         return v
 
-    @validator("origin")
-    def validate_origin(cls, v):
+    @field_validator("origin")
+    @classmethod
+    def validate_origin(cls, v: str) -> str:
         if v not in ORIGINS:
             raise ValueError(f"Origin must be one of: {', '.join(ORIGINS)}")
         return v
@@ -577,7 +600,14 @@ async def root():
 
 @app.get("/health")
 async def health():
-    return {"status": "healthy"}
+    return await health_checker.check_health()
+
+
+@app.get("/metrics")
+async def get_metrics(
+    current_user: TokenData = Depends(require_permission(Permission.AUDIT_VIEW)),
+):
+    return metrics.snapshot()
 
 
 @app.post("/accounts", response_model=AccountResponse)
@@ -986,3 +1016,206 @@ async def resolve_case(
     )
     result = await command.execute(case_id, resolution_notes, resolved_by, user_id)
     return result
+
+
+# ---------------------------------------------------------------------------
+# UPDATE / ACTION ENDPOINTS
+# ---------------------------------------------------------------------------
+
+
+@app.put("/contacts/{contact_id}", response_model=ContactResponse)
+async def update_contact(
+    contact_id: str,
+    request: CreateContactRequest,
+    current_user: TokenData = Depends(require_permission(Permission.CONTACTS_EDIT)),
+):
+    dto = CreateContactDTO(
+        account_id=request.account_id,
+        first_name=request.first_name,
+        last_name=request.last_name,
+        email=request.email,
+        owner_id=request.owner_id,
+        phone=request.phone,
+        title=request.title,
+        department=request.department,
+    )
+    command = UpdateContactCommand(
+        repository=contact_repo,
+        event_bus=event_bus,
+        audit_log=audit_log,
+    )
+    try:
+        result = await command.execute(contact_id, dto, request.owner_id)
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@app.put("/opportunities/{opportunity_id}", response_model=OpportunityResponse)
+async def update_opportunity(
+    opportunity_id: str,
+    request: CreateOpportunityRequest,
+    current_user: TokenData = Depends(
+        require_permission(Permission.OPPORTUNITIES_EDIT)
+    ),
+):
+    dto = CreateOpportunityDTO(
+        account_id=request.account_id,
+        name=request.name,
+        amount=request.amount,
+        currency=request.currency,
+        close_date=request.close_date,
+        owner_id=request.owner_id,
+        source=request.source,
+        contact_id=request.contact_id,
+        description=request.description,
+    )
+    command = UpdateOpportunityCommand(
+        repository=opportunity_repo,
+        event_bus=event_bus,
+        audit_log=audit_log,
+    )
+    try:
+        result = await command.execute(opportunity_id, dto, request.owner_id)
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@app.post("/accounts/{account_id}/deactivate", response_model=AccountResponse)
+async def deactivate_account(
+    account_id: str,
+    current_user: TokenData = Depends(require_permission(Permission.ACCOUNTS_EDIT)),
+):
+    command = DeactivateAccountCommand(
+        repository=account_repo,
+        event_bus=event_bus,
+        audit_log=audit_log,
+    )
+    try:
+        result = await command.execute(account_id, current_user.user_id)
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+class ConvertLeadRequest(BaseModel):
+    account_id: constr(max_length=100)
+    contact_id: constr(max_length=100)
+    opportunity_id: Optional[constr(max_length=100)] = None
+
+
+@app.post("/leads/{lead_id}/convert")
+async def convert_lead(
+    lead_id: str,
+    request: ConvertLeadRequest,
+    current_user: TokenData = Depends(require_permission(Permission.LEADS_CONVERT)),
+):
+    command = ConvertLeadCommand(
+        lead_repository=lead_repo,
+        account_repository=account_repo,
+        contact_repository=contact_repo,
+        opportunity_repository=opportunity_repo,
+        event_bus=event_bus,
+        audit_log=audit_log,
+    )
+    try:
+        result = await command.execute(
+            lead_id,
+            request.account_id,
+            request.contact_id,
+            request.opportunity_id or "",
+            current_user.user_id,
+        )
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@app.post("/cases/{case_id}/close")
+async def close_case(
+    case_id: str,
+    current_user: TokenData = Depends(require_permission(Permission.CASES_RESOLVE)),
+):
+    command = CloseCaseCommand(
+        repository=case_repo,
+        event_bus=event_bus,
+        audit_log=audit_log,
+    )
+    try:
+        result = await command.execute(case_id, current_user.user_id)
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+# ---------------------------------------------------------------------------
+# DELETE ENDPOINTS
+# ---------------------------------------------------------------------------
+
+
+@app.delete("/accounts/{account_id}")
+async def delete_account(
+    account_id: str,
+    current_user: TokenData = Depends(require_permission(Permission.ACCOUNTS_DELETE)),
+):
+    query = GetAccountQuery(repository=account_repo)
+    result = await query.execute(account_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Account not found")
+    await account_repo.delete(account_id)
+    return Response(status_code=204)
+
+
+@app.delete("/contacts/{contact_id}")
+async def delete_contact(
+    contact_id: str,
+    current_user: TokenData = Depends(require_permission(Permission.CONTACTS_DELETE)),
+):
+    query = GetContactQuery(repository=contact_repo)
+    result = await query.execute(contact_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Contact not found")
+    await contact_repo.delete(contact_id)
+    return Response(status_code=204)
+
+
+@app.delete("/opportunities/{opportunity_id}")
+async def delete_opportunity(
+    opportunity_id: str,
+    current_user: TokenData = Depends(
+        require_permission(Permission.OPPORTUNITIES_DELETE)
+    ),
+):
+    query = GetOpportunityQuery(repository=opportunity_repo)
+    result = await query.execute(opportunity_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Opportunity not found")
+    await opportunity_repo.delete(opportunity_id)
+    return Response(status_code=204)
+
+
+@app.delete("/leads/{lead_id}")
+async def delete_lead(
+    lead_id: str,
+    current_user: TokenData = Depends(require_permission(Permission.LEADS_DELETE)),
+):
+    query = GetLeadQuery(repository=lead_repo)
+    result = await query.execute(lead_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    await lead_repo.delete(lead_id)
+    return Response(status_code=204)
+
+
+@app.delete("/cases/{case_id}")
+async def delete_case(
+    case_id: str,
+    current_user: TokenData = Depends(require_permission(Permission.CASES_DELETE)),
+):
+    query = GetCaseQuery(repository=case_repo)
+    result = await query.execute(case_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Case not found")
+    await case_repo.delete(case_id)
+    return Response(status_code=204)

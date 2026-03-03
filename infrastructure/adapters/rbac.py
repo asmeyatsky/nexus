@@ -46,6 +46,7 @@ class Permission(Enum):
     CASES_VIEW = "cases:view"
     CASES_CREATE = "cases:create"
     CASES_EDIT = "cases:edit"
+    CASES_DELETE = "cases:delete"
     CASES_ESCALATE = "cases:escalate"
     CASES_RESOLVE = "cases:resolve"
 
@@ -90,6 +91,7 @@ ROLE_PERMISSIONS: Dict[RoleType, Set[Permission]] = {
         Permission.CASES_VIEW,
         Permission.CASES_CREATE,
         Permission.CASES_EDIT,
+        Permission.CASES_DELETE,
         Permission.CASES_ESCALATE,
         Permission.CASES_RESOLVE,
         Permission.USERS_MANAGE,
@@ -130,6 +132,7 @@ ROLE_PERMISSIONS: Dict[RoleType, Set[Permission]] = {
         Permission.CASES_VIEW,
         Permission.CASES_CREATE,
         Permission.CASES_EDIT,
+        Permission.CASES_DELETE,
         Permission.CASES_ESCALATE,
         Permission.CASES_RESOLVE,
     },

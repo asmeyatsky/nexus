@@ -7,8 +7,13 @@ Architectural Intent:
 - Features: opportunity scoring, lead enrichment, content generation
 """
 
+import json
+import logging
+import re
 from typing import Optional
 from dataclasses import dataclass
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -38,6 +43,33 @@ class EmailDraft:
     tone: str = "professional"
 
 
+def _extract_json(text: str) -> Optional[dict]:
+    """Extract JSON from model response text, with fallback to regex."""
+    # Try direct parse
+    try:
+        return json.loads(text)
+    except (json.JSONDecodeError, TypeError):
+        pass
+
+    # Try extracting JSON from markdown code block
+    match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
+    if match:
+        try:
+            return json.loads(match.group(1))
+        except json.JSONDecodeError:
+            pass
+
+    # Try finding first { ... } block
+    match = re.search(r"\{[^{}]*\}", text, re.DOTALL)
+    if match:
+        try:
+            return json.loads(match.group(0))
+        except json.JSONDecodeError:
+            pass
+
+    return None
+
+
 class VertexAIClient:
     """Client for Vertex AI integration."""
 
@@ -54,7 +86,7 @@ class VertexAIClient:
                 aiplatform.init(project=self.project_id, location=self.location)
                 self._client = aiplatform
             except Exception as e:
-                print(f"Vertex AI not available: {e}")
+                logger.warning(f"Vertex AI not available: {e}")
                 return None
         return self._client
 
@@ -82,16 +114,28 @@ Provide:
 
 Format as JSON with keys: company_size, industry_trends, recommended_approach"""
 
-            model = client.GenerativeModel("gemini-pro")
-            _response = model.generate_content(prompt)
+            model = client.GenerativeModel("gemini-2.0-flash")
+            response = model.generate_content(prompt)
+            logger.info(f"Vertex AI lead enrichment response for {company_name}")
 
+            parsed = _extract_json(response.text)
+            if parsed:
+                return LeadEnrichment(
+                    company_size=parsed.get("company_size", "Unknown"),
+                    industry_trends=parsed.get("industry_trends", ""),
+                    recommended_approach=parsed.get("recommended_approach", ""),
+                    confidence_score=0.75,
+                )
+
+            # Fallback: use raw text as insight
             return LeadEnrichment(
-                company_size="Mid-market",
-                industry_trends="Digital transformation",
-                recommended_approach="Focus on efficiency gains",
-                confidence_score=0.75,
+                company_size="Unknown",
+                industry_trends=response.text[:200] if response.text else "",
+                recommended_approach="Review AI response manually",
+                confidence_score=0.4,
             )
-        except Exception:
+        except Exception as e:
+            logger.error(f"Lead enrichment failed for {company_name}: {e}")
             return LeadEnrichment(
                 confidence_score=0.0,
             )
@@ -129,16 +173,38 @@ Provide:
 
 Format as JSON with keys: risk_level, success_probability, recommendations (array), insights"""
 
-            model = client.GenerativeModel("gemini-pro")
-            _response = model.generate_content(prompt)
+            model = client.GenerativeModel("gemini-2.0-flash")
+            response = model.generate_content(prompt)
+            logger.info(f"Vertex AI opportunity analysis for {opportunity_name}")
+
+            parsed = _extract_json(response.text)
+            if parsed:
+                risk = parsed.get("risk_level", "medium")
+                if risk not in ("low", "medium", "high"):
+                    risk = "medium"
+                prob = parsed.get("success_probability", 0.5)
+                if isinstance(prob, (int, float)):
+                    prob = max(0.0, min(1.0, float(prob)))
+                else:
+                    prob = 0.5
+                recs = parsed.get("recommendations", [])
+                if isinstance(recs, str):
+                    recs = [recs]
+                return OpportunityAnalysis(
+                    risk_level=risk,
+                    success_probability=prob,
+                    recommendations=recs,
+                    insights=parsed.get("insights", ""),
+                )
 
             return OpportunityAnalysis(
-                risk_level="low",
-                success_probability=0.7,
-                recommendations=["Accelerate to close", "Executive sponsor meeting"],
-                insights="Strong fit with customer priorities",
+                risk_level="medium",
+                success_probability=0.5,
+                recommendations=["Review AI response manually"],
+                insights=response.text[:200] if response.text else "",
             )
-        except Exception:
+        except Exception as e:
+            logger.error(f"Opportunity analysis failed for {opportunity_name}: {e}")
             return OpportunityAnalysis()
 
     async def generate_email_draft(
@@ -164,17 +230,32 @@ Recipient: {recipient_name}
 Company: {company}
 Purpose: {purpose}
 
-Include subject line and body."""
+Format as JSON with keys: subject, body"""
 
-            model = client.GenerativeModel("gemini-pro")
-            _response = model.generate_content(prompt)
+            model = client.GenerativeModel("gemini-2.0-flash")
+            response = model.generate_content(prompt)
+            logger.info(f"Vertex AI email draft for {recipient_name} at {company}")
 
+            parsed = _extract_json(response.text)
+            if parsed and "subject" in parsed and "body" in parsed:
+                return EmailDraft(
+                    subject=parsed["subject"],
+                    body=parsed["body"],
+                    tone=tone,
+                )
+
+            # Fallback: try to split response into subject/body
+            text = response.text or ""
+            lines = text.strip().split("\n", 1)
+            subject = lines[0].replace("Subject:", "").strip() if lines else f"Ideas for {company}"
+            body = lines[1].strip() if len(lines) > 1 else text
             return EmailDraft(
-                subject=f"Ideas for {company}",
-                body=f"Hi {recipient_name},\n\nI wanted to reach out...",
+                subject=subject[:200],
+                body=body,
                 tone=tone,
             )
-        except Exception:
+        except Exception as e:
+            logger.error(f"Email draft generation failed: {e}")
             return EmailDraft(
                 subject=f"Discussion about {company}",
                 body=f"Hi {recipient_name},\n\nLet's connect about {company}.",

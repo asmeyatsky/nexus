@@ -13,9 +13,14 @@ from infrastructure.config.settings import settings
 class Container:
     """Dependency injection container — composition root."""
 
-    def __init__(self, use_database: bool = False):
+    def __init__(self, use_database: bool = None):
         self._singletons = {}
-        self._use_database = use_database
+        if use_database is None:
+            # Auto-detect: use DB when DATABASE_URL is set and not empty/sqlite
+            db_url = settings.database_url
+            self._use_database = bool(db_url and "sqlite" not in db_url)
+        else:
+            self._use_database = use_database
         self._db_session = None
 
     def set_db_session(self, session):

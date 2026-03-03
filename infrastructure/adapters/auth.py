@@ -17,7 +17,7 @@ import re
 
 from jose import JWTError, jwt
 from passlib.context import CryptContext
-from pydantic import BaseModel, validator
+from pydantic import BaseModel, field_validator
 
 from infrastructure.config.settings import settings
 
@@ -51,7 +51,8 @@ class UserCreate(BaseModel):
     role: str = "user"
     org_id: str = DEFAULT_ORG_ID
 
-    @validator("password")
+    @field_validator("password")
+    @classmethod
     def validate_password(cls, v: str) -> str:
         if len(v) < settings.min_password_length:
             raise ValueError(

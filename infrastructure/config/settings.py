@@ -9,10 +9,13 @@ Architectural Intent:
 
 import os
 from functools import lru_cache
+from pydantic import ConfigDict
 from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
+    model_config = ConfigDict(env_file=".env", case_sensitive=False)
+
     # App
     app_name: str = "Nexus CRM"
     debug: bool = False
@@ -68,10 +71,6 @@ class Settings(BaseSettings):
     salesforce_client_secret: str = os.environ.get("SALESFORCE_CLIENT_SECRET", "")
     sendgrid_api_key: str = os.environ.get("SENDGRID_API_KEY", "")
     mailchimp_api_key: str = os.environ.get("MAILCHIMP_API_KEY", "")
-
-    class Config:
-        env_file = ".env"
-        case_sensitive = False
 
     def validate_secrets(self):
         """Ensure critical secrets are not empty in any environment."""
