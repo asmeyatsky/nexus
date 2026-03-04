@@ -44,9 +44,7 @@ class RedisCache:
     """Async Redis caching layer."""
 
     def __init__(self, redis_url: str = None):
-        self.redis_url = redis_url or os.getenv(
-            "REDIS_URL", "redis://localhost:6379"
-        )
+        self.redis_url = redis_url or os.getenv("REDIS_URL", "redis://localhost:6379")
         self._client: Optional[redis.Redis] = None
         self._configs: Dict[CacheTier, CacheConfig] = {
             CacheTier.SESSION: CacheConfig(ttl=86400),

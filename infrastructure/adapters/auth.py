@@ -211,11 +211,13 @@ class RedisTokenRevocationStore:
 
 def _create_token_revocation_store():
     import os
+
     redis_url = os.environ.get("REDIS_URL", "")
     env = os.environ.get("ENVIRONMENT", "")
     if redis_url and env != "test":
         try:
             import redis.asyncio as aioredis
+
             client = aioredis.from_url(redis_url)
             return RedisTokenRevocationStore(client)
         except Exception:
@@ -344,9 +346,7 @@ class RedisFailedLoginTracker:
     async def get_remaining_attempts(self, account_key: str) -> int:
         """Return how many attempts remain before lockout."""
         try:
-            count = await self._redis.hget(
-                f"login_attempts:{account_key}", "count"
-            )
+            count = await self._redis.hget(f"login_attempts:{account_key}", "count")
             if count is None:
                 return self._max_attempts
             return max(0, self._max_attempts - int(count))
@@ -359,11 +359,13 @@ class RedisFailedLoginTracker:
 
 def _create_failed_login_tracker():
     import os
+
     redis_url = os.environ.get("REDIS_URL", "")
     env = os.environ.get("ENVIRONMENT", "")
     if redis_url and env != "test":
         try:
             import redis.asyncio as aioredis
+
             client = aioredis.from_url(redis_url)
             return RedisFailedLoginTracker(client)
         except Exception:

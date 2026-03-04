@@ -81,7 +81,9 @@ def test_change_stage_to_closed_lost_emits_opportunity_lost_event():
 def test_weighted_value_calculation():
     opp = make_opportunity(amount=Money.from_float(100000.0, "USD"))
     # probability=10 by default at PROSPECTING
-    assert opp.weighted_value.amount == Decimal("10000.00") or opp.weighted_value.amount_float == pytest.approx(10000.0)
+    assert opp.weighted_value.amount == Decimal(
+        "10000.00"
+    ) or opp.weighted_value.amount_float == pytest.approx(10000.0)
 
 
 def test_is_won_property():
@@ -124,7 +126,9 @@ def test_update_method_changes_fields():
 def test_update_emits_opportunity_updated_event():
     opp = make_opportunity()
     updated = opp.update(name="Changed Name")
-    events = [e for e in updated.domain_events if isinstance(e, OpportunityUpdatedEvent)]
+    events = [
+        e for e in updated.domain_events if isinstance(e, OpportunityUpdatedEvent)
+    ]
     assert len(events) == 1
 
 
@@ -132,9 +136,12 @@ def test_probability_updates_on_stage_change():
     opp = make_opportunity()
     qualified = opp.change_stage(OpportunityStage.QUALIFICATION)
     assert qualified.probability == 20
-    proposal = qualified.change_stage(OpportunityStage.NEEDS_ANALYSIS).change_stage(
-        OpportunityStage.VALUE_PROPOSITION
-    ).change_stage(OpportunityStage.DECISION_MAKERS).change_stage(OpportunityStage.PROPOSAL)
+    proposal = (
+        qualified.change_stage(OpportunityStage.NEEDS_ANALYSIS)
+        .change_stage(OpportunityStage.VALUE_PROPOSITION)
+        .change_stage(OpportunityStage.DECISION_MAKERS)
+        .change_stage(OpportunityStage.PROPOSAL)
+    )
     assert proposal.probability == 60
 
 

@@ -59,27 +59,29 @@ class MigrationResult:
 
 
 # Allowlist of valid Salesforce standard object names to prevent SOQL injection.
-_ALLOWED_SF_OBJECTS = frozenset({
-    "Account",
-    "Contact",
-    "Opportunity",
-    "Lead",
-    "Case",
-    "Campaign",
-    "Task",
-    "Event",
-    "User",
-    "Product2",
-    "Pricebook2",
-    "PricebookEntry",
-    "Order",
-    "OrderItem",
-    "Contract",
-    "Quote",
-    "QuoteLineItem",
-    "Asset",
-    "Solution",
-})
+_ALLOWED_SF_OBJECTS = frozenset(
+    {
+        "Account",
+        "Contact",
+        "Opportunity",
+        "Lead",
+        "Case",
+        "Campaign",
+        "Task",
+        "Event",
+        "User",
+        "Product2",
+        "Pricebook2",
+        "PricebookEntry",
+        "Order",
+        "OrderItem",
+        "Contract",
+        "Quote",
+        "QuoteLineItem",
+        "Asset",
+        "Solution",
+    }
+)
 
 
 def _validate_object_name(object_name: str) -> None:

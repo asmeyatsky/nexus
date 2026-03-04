@@ -3,6 +3,7 @@ Tests for InMemoryOpportunityRepository.
 """
 
 import os
+
 os.environ["JWT_SECRET_KEY"] = "test-secret-key-for-testing-only"
 os.environ["DATABASE_URL"] = "sqlite:///test.db"
 os.environ["ENVIRONMENT"] = "test"
@@ -46,7 +47,9 @@ async def test_opportunity_repo_get_open_opportunities():
     open_opp1 = make_opportunity(account_id)
     open_opp2 = make_opportunity(account_id)
     closed_won = make_opportunity(account_id).change_stage(OpportunityStage.CLOSED_WON)
-    closed_lost = make_opportunity(account_id).change_stage(OpportunityStage.CLOSED_LOST)
+    closed_lost = make_opportunity(account_id).change_stage(
+        OpportunityStage.CLOSED_LOST
+    )
 
     await repo.save(open_opp1)
     await repo.save(open_opp2)

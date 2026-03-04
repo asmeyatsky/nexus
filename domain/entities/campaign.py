@@ -12,9 +12,20 @@ from decimal import Decimal
 from typing import Optional
 from enum import Enum
 
-VALID_CURRENCIES = frozenset({
-    "USD", "EUR", "GBP", "JPY", "CAD", "AUD", "CHF", "CNY", "INR", "BRL",
-})
+VALID_CURRENCIES = frozenset(
+    {
+        "USD",
+        "EUR",
+        "GBP",
+        "JPY",
+        "CAD",
+        "AUD",
+        "CHF",
+        "CNY",
+        "INR",
+        "BRL",
+    }
+)
 
 
 class CampaignStatus(Enum):

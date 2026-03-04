@@ -3,6 +3,7 @@ Tests for InMemoryLeadRepository.
 """
 
 import os
+
 os.environ["JWT_SECRET_KEY"] = "test-secret-key-for-testing-only"
 os.environ["DATABASE_URL"] = "sqlite:///test.db"
 os.environ["ENVIRONMENT"] = "test"
@@ -42,7 +43,9 @@ async def test_lead_repo_get_by_status():
     repo = InMemoryLeadRepository()
 
     new_lead = make_lead(email_suffix="new")
-    contacted_lead = make_lead(email_suffix="contacted").change_status(LeadStatus.CONTACTED)
+    contacted_lead = make_lead(email_suffix="contacted").change_status(
+        LeadStatus.CONTACTED
+    )
     qualified_lead = (
         make_lead(email_suffix="qual")
         .change_status(LeadStatus.CONTACTED)

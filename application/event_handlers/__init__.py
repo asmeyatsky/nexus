@@ -44,6 +44,7 @@ def _get_webhook_service():
 def _get_notification_adapter():
     try:
         from infrastructure.adapters import ConsoleNotificationAdapter
+
         return ConsoleNotificationAdapter()
     except Exception:
         return None
@@ -59,6 +60,7 @@ def _get_cache():
 def _get_metrics():
     try:
         from infrastructure.adapters.monitoring import metrics
+
         return metrics
     except Exception:
         return None
@@ -68,6 +70,7 @@ async def _fire_webhook(event_name, data, org_id=""):
     """Fire a webhook, logging errors but never raising."""
     try:
         from infrastructure.adapters.webhooks import WebhookEvent
+
         svc = _get_webhook_service()
         if svc is None:
             return
@@ -154,7 +157,11 @@ async def on_case_escalated(event: CaseEscalatedEvent):
     )
     await _fire_webhook(
         "CASE_CREATED",  # Use closest available webhook event
-        {"case_id": event.aggregate_id, "priority": event.new_priority, "escalated": True},
+        {
+            "case_id": event.aggregate_id,
+            "priority": event.new_priority,
+            "escalated": True,
+        },
     )
 
 
@@ -173,10 +180,13 @@ async def on_case_created(event: CaseCreatedEvent):
             if engine and engine._workflows:
                 for wf_id, wf in engine._workflows.items():
                     if wf.is_active:
-                        await engine.execute(wf_id, {
-                            "case_number": event.case_number,
-                            "subject": event.subject,
-                        })
+                        await engine.execute(
+                            wf_id,
+                            {
+                                "case_number": event.case_number,
+                                "subject": event.subject,
+                            },
+                        )
                         break
     except Exception as e:
         logger.debug(f"Workflow trigger skipped: {e}")
@@ -212,10 +222,13 @@ async def on_account_created(event: AccountCreatedEvent):
             if engine and engine._workflows:
                 for wf_id, wf in engine._workflows.items():
                     if wf.is_active:
-                        await engine.execute(wf_id, {
-                            "account_name": event.account_name,
-                            "account_id": event.aggregate_id,
-                        })
+                        await engine.execute(
+                            wf_id,
+                            {
+                                "account_name": event.account_name,
+                                "account_id": event.aggregate_id,
+                            },
+                        )
                         break
     except Exception as e:
         logger.debug(f"Onboarding workflow skipped: {e}")
@@ -260,17 +273,23 @@ async def on_lead_created(event: LeadCreatedEvent):
         if _container:
             scoring = _container.lead_scoring_service()
             if scoring:
-                score = scoring.score_lead({
-                    "name": event.lead_name,
-                    "email": event.email,
-                })
+                score = scoring.score_lead(
+                    {
+                        "name": event.lead_name,
+                        "email": event.email,
+                    }
+                )
                 logger.info(f"Lead {event.aggregate_id} scored: {score}")
     except Exception as e:
         logger.debug(f"Lead scoring skipped: {e}")
 
     await _fire_webhook(
         "LEAD_CREATED",
-        {"lead_name": event.lead_name, "email": event.email, "lead_id": event.aggregate_id},
+        {
+            "lead_name": event.lead_name,
+            "email": event.email,
+            "lead_id": event.aggregate_id,
+        },
     )
 
 
@@ -318,7 +337,10 @@ def register_all_subscribers(event_bus: Any, container_ref=None):
     else:
         # Fall back to the global container
         try:
-            from infrastructure.config.dependency_injection import container as di_container
+            from infrastructure.config.dependency_injection import (
+                container as di_container,
+            )
+
             _container = di_container
         except ImportError:
             pass

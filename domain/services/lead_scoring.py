@@ -7,7 +7,9 @@ from domain.entities import Lead
 class LeadScoringService:
     """Score leads based on engagement and fit criteria."""
 
-    def score(self, lead: Lead, engagement_signals: Optional[Dict[str, int]] = None) -> int:
+    def score(
+        self, lead: Lead, engagement_signals: Optional[Dict[str, int]] = None
+    ) -> int:
         score = 0
         # Fit scoring
         if lead.company:

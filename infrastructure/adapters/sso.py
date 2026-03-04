@@ -162,15 +162,18 @@ class SSOSession:
 
         session_id = secrets.token_urlsafe(32)
         csrf_token = secrets.token_urlsafe(32)
-        self._backend.set(session_id, {
-            "user_id": user_id,
-            "email": email,
-            "provider": provider.value,
-            "org_id": org_id,
-            "csrf_token": csrf_token,
-            "created_at": time.time(),
-            "last_activity": time.time(),
-        })
+        self._backend.set(
+            session_id,
+            {
+                "user_id": user_id,
+                "email": email,
+                "provider": provider.value,
+                "org_id": org_id,
+                "csrf_token": csrf_token,
+                "created_at": time.time(),
+                "last_activity": time.time(),
+            },
+        )
         return session_id, csrf_token
 
     def validate_session(
@@ -217,13 +220,9 @@ class SAMLAuthHandler:
         saml_acs_url = settings.saml_acs_url
 
         if not saml_issuer:
-            raise ValueError(
-                "SAML_ISSUER must be configured in settings/environment"
-            )
+            raise ValueError("SAML_ISSUER must be configured in settings/environment")
         if not saml_acs_url:
-            raise ValueError(
-                "SAML_ACS_URL must be configured in settings/environment"
-            )
+            raise ValueError("SAML_ACS_URL must be configured in settings/environment")
 
         request_id = f"_{uuid.uuid4()}"
 
@@ -300,8 +299,7 @@ def validate_redirect_uri(redirect_uri: str) -> bool:
     allowlist = _get_redirect_uri_allowlist()
     if not allowlist:
         logger.warning(
-            "SSO_REDIRECT_URI_ALLOWLIST is not configured; "
-            "rejecting redirect_uri=%s",
+            "SSO_REDIRECT_URI_ALLOWLIST is not configured; rejecting redirect_uri=%s",
             redirect_uri,
         )
         return False

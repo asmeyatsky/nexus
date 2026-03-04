@@ -49,7 +49,9 @@ async def _create_account(account_repo, event_bus, audit_log):
         territory="north_america",
         owner_id=OWNER_ID,
     )
-    cmd = CreateAccountCommand(repository=account_repo, event_bus=event_bus, audit_log=audit_log)
+    cmd = CreateAccountCommand(
+        repository=account_repo, event_bus=event_bus, audit_log=audit_log
+    )
     return await cmd.execute(dto)
 
 
@@ -96,16 +98,22 @@ async def _create_lead(lead_repo, event_bus, audit_log):
         company="Acme",
         owner_id=OWNER_ID,
     )
-    cmd = CreateLeadCommand(repository=lead_repo, event_bus=event_bus, audit_log=audit_log)
+    cmd = CreateLeadCommand(
+        repository=lead_repo, event_bus=event_bus, audit_log=audit_log
+    )
     return await cmd.execute(dto)
 
 
 @pytest.mark.asyncio
-async def test_update_case_status_command(case_repo, account_repo, event_bus, audit_log):
+async def test_update_case_status_command(
+    case_repo, account_repo, event_bus, audit_log
+):
     account = await _create_account(account_repo, event_bus, audit_log)
     case = await _create_case(case_repo, account_repo, event_bus, audit_log, account.id)
 
-    cmd = UpdateCaseStatusCommand(repository=case_repo, event_bus=event_bus, audit_log=audit_log)
+    cmd = UpdateCaseStatusCommand(
+        repository=case_repo, event_bus=event_bus, audit_log=audit_log
+    )
     updated = await cmd.execute(case.id, "in_progress", OWNER_ID)
     assert updated.status == "in_progress"
 
@@ -116,11 +124,17 @@ async def test_resolve_case_command(case_repo, account_repo, event_bus, audit_lo
     case = await _create_case(case_repo, account_repo, event_bus, audit_log, account.id)
 
     # First move to in_progress
-    update_cmd = UpdateCaseStatusCommand(repository=case_repo, event_bus=event_bus, audit_log=audit_log)
+    update_cmd = UpdateCaseStatusCommand(
+        repository=case_repo, event_bus=event_bus, audit_log=audit_log
+    )
     await update_cmd.execute(case.id, "in_progress", OWNER_ID)
 
-    resolve_cmd = ResolveCaseCommand(repository=case_repo, event_bus=event_bus, audit_log=audit_log)
-    resolved = await resolve_cmd.execute(case.id, "Fixed it", "agent@company.com", OWNER_ID)
+    resolve_cmd = ResolveCaseCommand(
+        repository=case_repo, event_bus=event_bus, audit_log=audit_log
+    )
+    resolved = await resolve_cmd.execute(
+        case.id, "Fixed it", "agent@company.com", OWNER_ID
+    )
     assert resolved.status == "resolved"
     assert resolved.resolution_notes == "Fixed it"
 
@@ -130,15 +144,21 @@ async def test_close_case_command(case_repo, account_repo, event_bus, audit_log)
     account = await _create_account(account_repo, event_bus, audit_log)
     case = await _create_case(case_repo, account_repo, event_bus, audit_log, account.id)
 
-    close_cmd = CloseCaseCommand(repository=case_repo, event_bus=event_bus, audit_log=audit_log)
+    close_cmd = CloseCaseCommand(
+        repository=case_repo, event_bus=event_bus, audit_log=audit_log
+    )
     closed = await close_cmd.execute(case.id, OWNER_ID)
     assert closed.status == "closed"
 
 
 @pytest.mark.asyncio
-async def test_update_opportunity_stage_command(opportunity_repo, account_repo, event_bus, audit_log):
+async def test_update_opportunity_stage_command(
+    opportunity_repo, account_repo, event_bus, audit_log
+):
     account = await _create_account(account_repo, event_bus, audit_log)
-    opp = await _create_opportunity(opportunity_repo, account_repo, event_bus, audit_log, account.id)
+    opp = await _create_opportunity(
+        opportunity_repo, account_repo, event_bus, audit_log, account.id
+    )
 
     cmd = UpdateOpportunityStageCommand(
         repository=opportunity_repo, event_bus=event_bus, audit_log=audit_log
@@ -148,9 +168,13 @@ async def test_update_opportunity_stage_command(opportunity_repo, account_repo, 
 
 
 @pytest.mark.asyncio
-async def test_update_opportunity_command(opportunity_repo, account_repo, event_bus, audit_log):
+async def test_update_opportunity_command(
+    opportunity_repo, account_repo, event_bus, audit_log
+):
     account = await _create_account(account_repo, event_bus, audit_log)
-    opp = await _create_opportunity(opportunity_repo, account_repo, event_bus, audit_log, account.id)
+    opp = await _create_opportunity(
+        opportunity_repo, account_repo, event_bus, audit_log, account.id
+    )
 
     update_dto = CreateOpportunityDTO(
         account_id=account.id,
@@ -179,7 +203,9 @@ async def test_update_account_command(account_repo, event_bus, audit_log):
         territory="europe",
         owner_id=OWNER_ID,
     )
-    cmd = UpdateAccountCommand(repository=account_repo, event_bus=event_bus, audit_log=audit_log)
+    cmd = UpdateAccountCommand(
+        repository=account_repo, event_bus=event_bus, audit_log=audit_log
+    )
     updated = await cmd.execute(account.id, update_dto, OWNER_ID)
     assert updated.name == "Updated Corp"
 
@@ -188,7 +214,9 @@ async def test_update_account_command(account_repo, event_bus, audit_log):
 async def test_deactivate_account_command(account_repo, event_bus, audit_log):
     account = await _create_account(account_repo, event_bus, audit_log)
 
-    cmd = DeactivateAccountCommand(repository=account_repo, event_bus=event_bus, audit_log=audit_log)
+    cmd = DeactivateAccountCommand(
+        repository=account_repo, event_bus=event_bus, audit_log=audit_log
+    )
     deactivated = await cmd.execute(account.id, OWNER_ID)
     assert deactivated.is_active is False
 
@@ -197,17 +225,23 @@ async def test_deactivate_account_command(account_repo, event_bus, audit_log):
 async def test_qualify_lead_command(lead_repo, event_bus, audit_log):
     lead = await _create_lead(lead_repo, event_bus, audit_log)
 
-    cmd = QualifyLeadCommand(repository=lead_repo, event_bus=event_bus, audit_log=audit_log)
+    cmd = QualifyLeadCommand(
+        repository=lead_repo, event_bus=event_bus, audit_log=audit_log
+    )
     qualified = await cmd.execute(lead.id, OWNER_ID)
     assert qualified.status == "qualified"
 
 
 @pytest.mark.asyncio
-async def test_convert_lead_command(lead_repo, account_repo, contact_repo, opportunity_repo, event_bus, audit_log):
+async def test_convert_lead_command(
+    lead_repo, account_repo, contact_repo, opportunity_repo, event_bus, audit_log
+):
     lead = await _create_lead(lead_repo, event_bus, audit_log)
 
     # Qualify first
-    qualify_cmd = QualifyLeadCommand(repository=lead_repo, event_bus=event_bus, audit_log=audit_log)
+    qualify_cmd = QualifyLeadCommand(
+        repository=lead_repo, event_bus=event_bus, audit_log=audit_log
+    )
     await qualify_cmd.execute(lead.id, OWNER_ID)
 
     account_id = str(uuid4())
@@ -222,19 +256,25 @@ async def test_convert_lead_command(lead_repo, account_repo, contact_repo, oppor
         event_bus=event_bus,
         audit_log=audit_log,
     )
-    result = await cmd.execute(lead.id, account_id, contact_id, opportunity_id, OWNER_ID)
+    result = await cmd.execute(
+        lead.id, account_id, contact_id, opportunity_id, OWNER_ID
+    )
     assert result["lead"].status == "converted"
 
 
 @pytest.mark.asyncio
 async def test_update_case_status_raises_for_not_found(case_repo, event_bus, audit_log):
-    cmd = UpdateCaseStatusCommand(repository=case_repo, event_bus=event_bus, audit_log=audit_log)
+    cmd = UpdateCaseStatusCommand(
+        repository=case_repo, event_bus=event_bus, audit_log=audit_log
+    )
     with pytest.raises(ValueError, match="not found"):
         await cmd.execute(str(uuid4()), "in_progress", OWNER_ID)
 
 
 @pytest.mark.asyncio
-async def test_update_opportunity_stage_raises_for_not_found(opportunity_repo, event_bus, audit_log):
+async def test_update_opportunity_stage_raises_for_not_found(
+    opportunity_repo, event_bus, audit_log
+):
     cmd = UpdateOpportunityStageCommand(
         repository=opportunity_repo, event_bus=event_bus, audit_log=audit_log
     )

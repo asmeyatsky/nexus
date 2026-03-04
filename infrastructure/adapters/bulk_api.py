@@ -174,9 +174,7 @@ class BulkAPI:
 bulk_api = BulkAPI()
 
 
-async def bulk_import_accounts_handler(
-    record: Dict[str, Any], repository=None
-) -> Dict:
+async def bulk_import_accounts_handler(record: Dict[str, Any], repository=None) -> Dict:
     """Handler for bulk importing accounts.
 
     Args:
@@ -188,7 +186,9 @@ async def bulk_import_accounts_handler(
     from uuid import UUID
 
     if repository is None:
-        from infrastructure.mcp_servers.nexus_crm_server import InMemoryAccountRepository
+        from infrastructure.mcp_servers.nexus_crm_server import (
+            InMemoryAccountRepository,
+        )
 
         repository = InMemoryAccountRepository()
 

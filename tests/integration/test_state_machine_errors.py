@@ -6,6 +6,7 @@ and that missing resources return 404.
 """
 
 import os
+
 os.environ["JWT_SECRET_KEY"] = "test-secret-key-for-testing-only"
 os.environ["DATABASE_URL"] = "sqlite:///test.db"
 os.environ["ENVIRONMENT"] = "test"

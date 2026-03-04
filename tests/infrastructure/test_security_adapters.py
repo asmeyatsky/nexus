@@ -3,6 +3,7 @@ Tests for security infrastructure adapters (rate limiter, IP security).
 """
 
 import os
+
 os.environ["JWT_SECRET_KEY"] = "test-secret-key-for-testing-only"
 os.environ["DATABASE_URL"] = "sqlite:///test.db"
 os.environ["ENVIRONMENT"] = "test"
@@ -19,6 +20,7 @@ from infrastructure.adapters.security import (
 # ---------------------------------------------------------------------------
 # RateLimiter
 # ---------------------------------------------------------------------------
+
 
 def test_rate_limiter_initial_state_allows_requests():
     limiter = RateLimiter()
@@ -80,6 +82,7 @@ def test_rate_limiter_with_org_id():
 # ---------------------------------------------------------------------------
 # IPSecurity
 # ---------------------------------------------------------------------------
+
 
 def test_ip_security_add_allowed_ip():
     security = IPSecurity()

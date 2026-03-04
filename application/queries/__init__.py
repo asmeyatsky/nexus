@@ -120,7 +120,10 @@ class GetOpenOpportunitiesQuery:
 
     async def execute(self, limit: int = 100, offset: int = 0) -> List[OpportunityDTO]:
         opportunities = await self.repository.get_open_opportunities()
-        return [OpportunityDTO.from_entity(o) for o in opportunities[offset : offset + limit]]
+        return [
+            OpportunityDTO.from_entity(o)
+            for o in opportunities[offset : offset + limit]
+        ]
 
 
 @dataclass

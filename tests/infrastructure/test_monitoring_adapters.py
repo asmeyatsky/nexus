@@ -3,6 +3,7 @@ Tests for monitoring infrastructure adapters.
 """
 
 import os
+
 os.environ["JWT_SECRET_KEY"] = "test-secret-key-for-testing-only"
 os.environ["DATABASE_URL"] = "sqlite:///test.db"
 os.environ["ENVIRONMENT"] = "test"
@@ -26,10 +27,13 @@ from infrastructure.adapters.monitoring import (
 # MetricsCollector
 # ---------------------------------------------------------------------------
 
+
 def test_metrics_collector_record_request_increments_counter():
     m = MetricsCollector()
     m.record_request("GET", "/accounts", 200, 0.05)
-    count = m.http_requests_total.get({"method": "GET", "path": "/accounts", "status": "200"})
+    count = m.http_requests_total.get(
+        {"method": "GET", "path": "/accounts", "status": "200"}
+    )
     assert count == 1.0
 
 
@@ -39,7 +43,9 @@ def test_metrics_collector_record_multiple_requests():
     m.record_request("GET", "/accounts", 200, 0.03)
     m.record_request("POST", "/accounts", 201, 0.1)
 
-    count = m.http_requests_total.get({"method": "GET", "path": "/accounts", "status": "200"})
+    count = m.http_requests_total.get(
+        {"method": "GET", "path": "/accounts", "status": "200"}
+    )
     assert count == 2.0
 
 
@@ -82,6 +88,7 @@ def test_metrics_collector_to_prometheus_format_returns_valid_text():
 # _Counter
 # ---------------------------------------------------------------------------
 
+
 def test_counter_inc_and_get():
     counter = _Counter()
     counter.inc({"method": "GET"})
@@ -105,6 +112,7 @@ def test_counter_collect_returns_entries():
 # ---------------------------------------------------------------------------
 # _Gauge
 # ---------------------------------------------------------------------------
+
 
 def test_gauge_inc_dec_set_get():
     gauge = _Gauge()
@@ -131,6 +139,7 @@ def test_gauge_with_labels():
 # ---------------------------------------------------------------------------
 # _Histogram
 # ---------------------------------------------------------------------------
+
 
 def test_histogram_observe_and_collect():
     hist = _Histogram()
@@ -159,6 +168,7 @@ def test_histogram_observe_with_labels():
 # HealthChecker
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_health_checker_check_health_returns_dict_with_status():
     # No db_url or redis_url, so no checks run -- still returns structure
@@ -176,6 +186,7 @@ async def test_health_checker_check_health_returns_dict_with_status():
 # setup_logging
 # ---------------------------------------------------------------------------
 
+
 def test_setup_logging_returns_logger():
     logger = setup_logging(logger_name="test.monitoring")
     assert isinstance(logger, logging.Logger)
@@ -186,8 +197,7 @@ def test_setup_logging_idempotent():
     setup_logging(logger_name="test.idempotent")
     logger = setup_logging(logger_name="test.idempotent")
     json_handlers = [
-        h for h in logger.handlers
-        if isinstance(h.formatter, StructuredJsonFormatter)
+        h for h in logger.handlers if isinstance(h.formatter, StructuredJsonFormatter)
     ]
     assert len(json_handlers) == 1
 
@@ -195,6 +205,7 @@ def test_setup_logging_idempotent():
 # ---------------------------------------------------------------------------
 # StructuredJsonFormatter
 # ---------------------------------------------------------------------------
+
 
 def test_structured_json_formatter_produces_valid_json():
     formatter = StructuredJsonFormatter()

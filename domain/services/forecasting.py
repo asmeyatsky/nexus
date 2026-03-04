@@ -9,7 +9,11 @@ class ForecastingService:
 
     def calculate_weighted_pipeline(self, opportunities: List[Opportunity]) -> float:
         return sum(
-            (opp.weighted_value.amount_float for opp in opportunities if not opp.is_closed),
+            (
+                opp.weighted_value.amount_float
+                for opp in opportunities
+                if not opp.is_closed
+            ),
             0.0,
         )
 

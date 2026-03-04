@@ -155,9 +155,7 @@ class Case:
 
     def resolve(self, resolution_notes: str, resolved_by: str) -> "Case":
         if CaseStatus.RESOLVED not in VALID_STATUS_TRANSITIONS.get(self.status, set()):
-            raise ValueError(
-                f"Cannot resolve case from {self.status.value} status"
-            )
+            raise ValueError(f"Cannot resolve case from {self.status.value} status")
         now = datetime.now(UTC)
         return replace(
             self,
@@ -179,9 +177,7 @@ class Case:
 
     def close(self) -> "Case":
         if CaseStatus.CLOSED not in VALID_STATUS_TRANSITIONS.get(self.status, set()):
-            raise ValueError(
-                f"Cannot close case from {self.status.value} status"
-            )
+            raise ValueError(f"Cannot close case from {self.status.value} status")
         now = datetime.now(UTC)
         return replace(
             self,

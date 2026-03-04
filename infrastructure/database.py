@@ -64,6 +64,7 @@ def async_session():
         )
     return _async_session
 
+
 Base = declarative_base()
 
 
@@ -259,7 +260,9 @@ class QuoteModel(Base):
 
     id = Column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     org_id = Column(PGUUID(as_uuid=True), nullable=False, index=True)
-    opportunity_id = Column(PGUUID(as_uuid=True), ForeignKey("opportunities.id"), nullable=False)
+    opportunity_id = Column(
+        PGUUID(as_uuid=True), ForeignKey("opportunities.id"), nullable=False
+    )
     name = Column(String(255), nullable=False)
     status = Column(String(50), default="draft")
     currency = Column(String(3), default="USD")
@@ -337,7 +340,9 @@ class CustomFieldValueModel(Base):
 
     id = Column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     org_id = Column(PGUUID(as_uuid=True), nullable=False, index=True)
-    field_definition_id = Column(PGUUID(as_uuid=True), ForeignKey("custom_field_definitions.id"), nullable=False)
+    field_definition_id = Column(
+        PGUUID(as_uuid=True), ForeignKey("custom_field_definitions.id"), nullable=False
+    )
     entity_id = Column(PGUUID(as_uuid=True), nullable=False)
     value = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)

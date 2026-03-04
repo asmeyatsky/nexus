@@ -180,10 +180,30 @@ class TestForecastingService:
             is_closed: bool
 
         opps = [
-            FakeOpp("prospecting", Money.from_float(1000.0, "USD"), Money.from_float(100.0, "USD"), False),
-            FakeOpp("prospecting", Money.from_float(2000.0, "USD"), Money.from_float(200.0, "USD"), False),
-            FakeOpp("negotiation", Money.from_float(5000.0, "USD"), Money.from_float(4000.0, "USD"), False),
-            FakeOpp("closed_won", Money.from_float(3000.0, "USD"), Money.from_float(3000.0, "USD"), True),
+            FakeOpp(
+                "prospecting",
+                Money.from_float(1000.0, "USD"),
+                Money.from_float(100.0, "USD"),
+                False,
+            ),
+            FakeOpp(
+                "prospecting",
+                Money.from_float(2000.0, "USD"),
+                Money.from_float(200.0, "USD"),
+                False,
+            ),
+            FakeOpp(
+                "negotiation",
+                Money.from_float(5000.0, "USD"),
+                Money.from_float(4000.0, "USD"),
+                False,
+            ),
+            FakeOpp(
+                "closed_won",
+                Money.from_float(3000.0, "USD"),
+                Money.from_float(3000.0, "USD"),
+                True,
+            ),
         ]
         result = self.svc.forecast_by_stage(opps)
         assert result["prospecting"]["count"] == 2

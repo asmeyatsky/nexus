@@ -21,7 +21,9 @@ class PipelineStage:
 
     def __post_init__(self):
         if self.is_won and not self.is_closed:
-            raise ValueError("A won stage must also be closed (is_won=True requires is_closed=True)")
+            raise ValueError(
+                "A won stage must also be closed (is_won=True requires is_closed=True)"
+            )
 
 
 @dataclass(frozen=True)

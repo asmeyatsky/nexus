@@ -50,7 +50,11 @@ def test_change_status_contacted_to_qualified():
 
 
 def test_change_status_qualified_to_converted_via_change_status():
-    lead = make_lead().change_status(LeadStatus.CONTACTED).change_status(LeadStatus.QUALIFIED)
+    lead = (
+        make_lead()
+        .change_status(LeadStatus.CONTACTED)
+        .change_status(LeadStatus.QUALIFIED)
+    )
     updated = lead.change_status(LeadStatus.CONVERTED)
     assert updated.status == LeadStatus.CONVERTED
 
@@ -67,7 +71,11 @@ def test_change_status_invalid_converted_to_anything_raises_value_error():
 
 
 def test_convert_from_qualified_state():
-    lead = make_lead().change_status(LeadStatus.CONTACTED).change_status(LeadStatus.QUALIFIED)
+    lead = (
+        make_lead()
+        .change_status(LeadStatus.CONTACTED)
+        .change_status(LeadStatus.QUALIFIED)
+    )
     account_id = uuid4()
     contact_id = uuid4()
     converted = lead.convert(account_id=account_id, contact_id=contact_id)
@@ -109,7 +117,11 @@ def test_phone_number_value_object_optional():
 
 
 def test_convert_emits_lead_converted_event():
-    lead = make_lead().change_status(LeadStatus.CONTACTED).change_status(LeadStatus.QUALIFIED)
+    lead = (
+        make_lead()
+        .change_status(LeadStatus.CONTACTED)
+        .change_status(LeadStatus.QUALIFIED)
+    )
     account_id = uuid4()
     contact_id = uuid4()
     converted = lead.convert(account_id=account_id, contact_id=contact_id)

@@ -247,7 +247,11 @@ Format as JSON with keys: subject, body"""
             # Fallback: try to split response into subject/body
             text = response.text or ""
             lines = text.strip().split("\n", 1)
-            subject = lines[0].replace("Subject:", "").strip() if lines else f"Ideas for {company}"
+            subject = (
+                lines[0].replace("Subject:", "").strip()
+                if lines
+                else f"Ideas for {company}"
+            )
             body = lines[1].strip() if len(lines) > 1 else text
             return EmailDraft(
                 subject=subject[:200],

@@ -3,6 +3,7 @@ Tests for authentication infrastructure adapters.
 """
 
 import os
+
 os.environ["JWT_SECRET_KEY"] = "test-secret-key-for-testing-only"
 os.environ["DATABASE_URL"] = "sqlite:///test.db"
 os.environ["ENVIRONMENT"] = "test"
@@ -37,6 +38,7 @@ bcrypt_required = pytest.mark.skipif(
 # ---------------------------------------------------------------------------
 # TokenRevocationStore
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_token_revocation_store_revoke_and_is_revoked():
@@ -73,6 +75,7 @@ async def test_token_revocation_store_cleanup_on_max_size():
 # ---------------------------------------------------------------------------
 # FailedLoginTracker
 # ---------------------------------------------------------------------------
+
 
 def test_failed_login_tracker_record_failure_and_is_locked():
     tracker = FailedLoginTracker(max_attempts=3, lockout_duration=900)
@@ -115,6 +118,7 @@ def test_failed_login_tracker_get_remaining_attempts():
 # ---------------------------------------------------------------------------
 # UserRepository
 # ---------------------------------------------------------------------------
+
 
 @bcrypt_required
 @pytest.mark.asyncio
@@ -219,8 +223,11 @@ async def test_user_repository_update_password_raises_for_reused_password():
 # JWT functions
 # ---------------------------------------------------------------------------
 
+
 def test_create_access_token_returns_valid_jwt():
-    token = create_access_token({"sub": "user-123", "email": "user@example.com", "role": "user"})
+    token = create_access_token(
+        {"sub": "user-123", "email": "user@example.com", "role": "user"}
+    )
     assert token is not None
     assert isinstance(token, str)
     assert len(token) > 0
@@ -228,7 +235,12 @@ def test_create_access_token_returns_valid_jwt():
 
 def test_decode_token_decodes_correctly():
     token = create_access_token(
-        {"sub": "user-123", "email": "user@example.com", "role": "admin", "org_id": "org-1"}
+        {
+            "sub": "user-123",
+            "email": "user@example.com",
+            "role": "admin",
+            "org_id": "org-1",
+        }
     )
     token_data = decode_token(token)
     assert token_data is not None
@@ -245,6 +257,7 @@ def test_decode_token_returns_none_for_invalid_token():
 # ---------------------------------------------------------------------------
 # Password hashing
 # ---------------------------------------------------------------------------
+
 
 @bcrypt_required
 def test_get_password_hash_and_verify_password():

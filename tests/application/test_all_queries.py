@@ -88,6 +88,7 @@ def make_case(account_id, case_number="CASE-001") -> Case:
 # Account queries
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_get_account_query_returns_account_by_id(account_repo):
     account = make_account()
@@ -126,6 +127,7 @@ async def test_list_accounts_query_with_pagination(account_repo):
 # ---------------------------------------------------------------------------
 # Contact queries
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_get_contact_query_returns_contact_by_id(contact_repo):
@@ -169,6 +171,7 @@ async def test_get_contacts_by_account_query(contact_repo):
 # ---------------------------------------------------------------------------
 # Opportunity queries
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_get_opportunity_query(opportunity_repo):
@@ -226,6 +229,7 @@ async def test_get_open_opportunities_query_with_pagination(opportunity_repo):
 # Lead queries
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_get_lead_query(lead_repo):
     lead = make_lead()
@@ -250,6 +254,7 @@ async def test_list_leads_query(lead_repo):
 # ---------------------------------------------------------------------------
 # Case queries
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_get_case_query(case_repo):
@@ -278,7 +283,12 @@ async def test_list_cases_query(case_repo):
 async def test_get_open_cases_query_returns_only_open(case_repo):
     account_id = uuid4()
     open_case = make_case(account_id, case_number="CASE-001")
-    closed_case = make_case(account_id, case_number="CASE-002").change_status(CaseStatus.IN_PROGRESS).resolve("Fixed", "agent").close()
+    closed_case = (
+        make_case(account_id, case_number="CASE-002")
+        .change_status(CaseStatus.IN_PROGRESS)
+        .resolve("Fixed", "agent")
+        .close()
+    )
 
     await case_repo.save(open_case)
     await case_repo.save(closed_case)
@@ -321,7 +331,9 @@ async def test_get_accounts_by_owner_query(account_repo):
     owner_b = uuid4()
 
     for i in range(2):
-        await account_repo.save(make_account(name=f"Owner A Corp {i}", owner_id=owner_a))
+        await account_repo.save(
+            make_account(name=f"Owner A Corp {i}", owner_id=owner_a)
+        )
     await account_repo.save(make_account(name="Owner B Corp", owner_id=owner_b))
 
     query = GetAccountsByOwnerQuery(repository=account_repo)

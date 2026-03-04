@@ -295,9 +295,15 @@ class MetricsCollector:
         for entry in self.http_request_duration_seconds.collect():
             labels = ",".join(f'{k}="{v}"' for k, v in sorted(entry["labels"].items()))
             for bucket, count in entry.get("buckets", {}).items():
-                lines.append(f'http_request_duration_seconds_bucket{{{labels},le="{bucket}"}} {count}')
-            lines.append(f"http_request_duration_seconds_sum{{{labels}}} {entry['sum']}")
-            lines.append(f"http_request_duration_seconds_count{{{labels}}} {entry['count']}")
+                lines.append(
+                    f'http_request_duration_seconds_bucket{{{labels},le="{bucket}"}} {count}'
+                )
+            lines.append(
+                f"http_request_duration_seconds_sum{{{labels}}} {entry['sum']}"
+            )
+            lines.append(
+                f"http_request_duration_seconds_count{{{labels}}} {entry['count']}"
+            )
 
         # active_connections gauge
         lines.append("# HELP active_connections Current active connections")

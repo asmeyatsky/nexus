@@ -3,6 +3,7 @@ Tests for Redis cache adapter (graceful degradation without Redis).
 """
 
 import os
+
 os.environ["JWT_SECRET_KEY"] = "test-secret-key-for-testing-only"
 os.environ["DATABASE_URL"] = "sqlite:///test.db"
 os.environ["ENVIRONMENT"] = "test"
@@ -15,6 +16,7 @@ from infrastructure.adapters.cache import RedisCache, CacheTier, _escape_glob
 # ---------------------------------------------------------------------------
 # RedisCache graceful degradation (no Redis connection)
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_redis_cache_without_connection_returns_none_on_get():
@@ -50,6 +52,7 @@ def test_redis_cache_generate_key_produces_correct_format():
 # CacheTier enum values
 # ---------------------------------------------------------------------------
 
+
 def test_cache_tier_enum_values():
     assert CacheTier.SESSION.value == "session"
     assert CacheTier.QUERY.value == "query"
@@ -60,6 +63,7 @@ def test_cache_tier_enum_values():
 # ---------------------------------------------------------------------------
 # _escape_glob
 # ---------------------------------------------------------------------------
+
 
 def test_escape_glob_escapes_asterisk():
     result = _escape_glob("acct*123")

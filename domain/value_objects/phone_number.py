@@ -46,7 +46,9 @@ class PhoneNumber:
         elif len(cleaned) == 11 and cleaned.startswith("1"):
             return PhoneNumber(country_code="+1", number=cleaned[1:])
         else:
-            raise ValueError(f"Cannot parse phone number: {phone}. Provide in E.164 format (+<country_code><number>).")
+            raise ValueError(
+                f"Cannot parse phone number: {phone}. Provide in E.164 format (+<country_code><number>)."
+            )
 
     @property
     def formatted(self) -> str:

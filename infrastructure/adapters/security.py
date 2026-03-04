@@ -381,11 +381,13 @@ class RedisIPSecurity:
 
 def _create_rate_limiter():
     import os
+
     redis_url = os.environ.get("REDIS_URL", "")
     env = os.environ.get("ENVIRONMENT", "")
     if redis_url and env != "test":
         try:
             import redis.asyncio as aioredis
+
             client = aioredis.from_url(redis_url)
             return RedisRateLimiter(client)
         except Exception:
@@ -395,11 +397,13 @@ def _create_rate_limiter():
 
 def _create_ip_security():
     import os
+
     redis_url = os.environ.get("REDIS_URL", "")
     env = os.environ.get("ENVIRONMENT", "")
     if redis_url and env != "test":
         try:
             import redis.asyncio as aioredis
+
             client = aioredis.from_url(redis_url)
             return RedisIPSecurity(client)
         except Exception:

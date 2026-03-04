@@ -75,7 +75,9 @@ class MarketingAutomationService:
     def configure_provider(self, provider: EmailProvider, config: Dict):
         self._provider_config[provider] = config
 
-    async def _retry_with_backoff(self, coro_func, *args, max_retries: int = 3, **kwargs):
+    async def _retry_with_backoff(
+        self, coro_func, *args, max_retries: int = 3, **kwargs
+    ):
         """Retry an async operation with exponential backoff."""
         last_exception = None
         for attempt in range(max_retries):
@@ -84,7 +86,7 @@ class MarketingAutomationService:
             except Exception as e:
                 last_exception = e
                 if attempt < max_retries - 1:
-                    wait_time = (2 ** attempt) * 0.5
+                    wait_time = (2**attempt) * 0.5
                     await asyncio.sleep(wait_time)
         raise last_exception
 

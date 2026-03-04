@@ -233,7 +233,11 @@ class WebhookService:
 
                     delivery.response_code = response.status_code
                     # Truncate response body to prevent storing large/sensitive payloads
-                    delivery.response_body = response.text[:_MAX_RESPONSE_BODY_LEN] if response.text else None
+                    delivery.response_body = (
+                        response.text[:_MAX_RESPONSE_BODY_LEN]
+                        if response.text
+                        else None
+                    )
                     delivery.attempts = attempt + 1
 
                     if 200 <= response.status_code < 300:

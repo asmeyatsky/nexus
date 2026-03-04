@@ -30,7 +30,9 @@ class Container:
         if self._use_database:
             db_session = session or self._db_session
             if db_session:
-                from infrastructure.repositories.account_repository import AccountRepository
+                from infrastructure.repositories.account_repository import (
+                    AccountRepository,
+                )
 
                 return AccountRepository(db_session)
         from infrastructure.mcp_servers.nexus_crm_server import (
@@ -43,7 +45,9 @@ class Container:
         if self._use_database:
             db_session = session or self._db_session
             if db_session:
-                from infrastructure.repositories.contact_repository import ContactRepository
+                from infrastructure.repositories.contact_repository import (
+                    ContactRepository,
+                )
 
                 return ContactRepository(db_session)
         from infrastructure.mcp_servers.nexus_crm_server import (

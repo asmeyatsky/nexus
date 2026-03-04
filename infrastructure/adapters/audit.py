@@ -23,27 +23,29 @@ import threading
 logger = logging.getLogger(__name__)
 
 # Field names whose values should be scrubbed from audit records
-SENSITIVE_FIELD_NAMES = frozenset({
-    "password",
-    "password_hash",
-    "hashed_password",
-    "secret",
-    "secret_key",
-    "api_key",
-    "api_secret",
-    "access_token",
-    "refresh_token",
-    "token",
-    "ssn",
-    "social_security_number",
-    "credit_card",
-    "credit_card_number",
-    "card_number",
-    "cvv",
-    "pin",
-    "private_key",
-    "client_secret",
-})
+SENSITIVE_FIELD_NAMES = frozenset(
+    {
+        "password",
+        "password_hash",
+        "hashed_password",
+        "secret",
+        "secret_key",
+        "api_key",
+        "api_secret",
+        "access_token",
+        "refresh_token",
+        "token",
+        "ssn",
+        "social_security_number",
+        "credit_card",
+        "credit_card_number",
+        "card_number",
+        "cvv",
+        "pin",
+        "private_key",
+        "client_secret",
+    }
+)
 
 _REDACTED = "[REDACTED]"
 

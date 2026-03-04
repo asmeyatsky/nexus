@@ -32,15 +32,21 @@ def upgrade() -> None:
         sa.Column("annual_revenue", sa.Numeric(15, 2)),
         sa.Column("currency", sa.String(3), server_default="USD"),
         sa.Column("employee_count", sa.Integer),
-        sa.Column("owner_id", postgresql.UUID(as_uuid=True), nullable=False, index=True),
+        sa.Column(
+            "owner_id", postgresql.UUID(as_uuid=True), nullable=False, index=True
+        ),
         sa.Column(
             "parent_account_id",
             postgresql.UUID(as_uuid=True),
             sa.ForeignKey("accounts.id"),
         ),
         sa.Column("is_active", sa.Boolean, server_default="true"),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now()
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), server_default=sa.func.now()
+        ),
     )
 
     op.create_table(
@@ -60,10 +66,16 @@ def upgrade() -> None:
         sa.Column("phone", sa.String(50)),
         sa.Column("title", sa.String(100)),
         sa.Column("department", sa.String(100)),
-        sa.Column("owner_id", postgresql.UUID(as_uuid=True), nullable=False, index=True),
+        sa.Column(
+            "owner_id", postgresql.UUID(as_uuid=True), nullable=False, index=True
+        ),
         sa.Column("is_active", sa.Boolean, server_default="true"),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now()
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), server_default=sa.func.now()
+        ),
     )
 
     op.create_table(
@@ -83,7 +95,9 @@ def upgrade() -> None:
         sa.Column("currency", sa.String(3), server_default="USD"),
         sa.Column("probability", sa.Integer, server_default="10"),
         sa.Column("close_date", sa.DateTime(timezone=True), nullable=False),
-        sa.Column("owner_id", postgresql.UUID(as_uuid=True), nullable=False, index=True),
+        sa.Column(
+            "owner_id", postgresql.UUID(as_uuid=True), nullable=False, index=True
+        ),
         sa.Column(
             "contact_id",
             postgresql.UUID(as_uuid=True),
@@ -94,8 +108,12 @@ def upgrade() -> None:
         sa.Column("description", sa.Text),
         sa.Column("is_active", sa.Boolean, server_default="true"),
         sa.Column("closed_at", sa.DateTime(timezone=True)),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now()
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), server_default=sa.func.now()
+        ),
     )
 
     op.create_table(
@@ -108,7 +126,9 @@ def upgrade() -> None:
         sa.Column("company", sa.String(255), nullable=False),
         sa.Column("status", sa.String(50), server_default="new"),
         sa.Column("rating", sa.String(50), server_default="cold"),
-        sa.Column("owner_id", postgresql.UUID(as_uuid=True), nullable=False, index=True),
+        sa.Column(
+            "owner_id", postgresql.UUID(as_uuid=True), nullable=False, index=True
+        ),
         sa.Column("source", sa.String(50)),
         sa.Column("phone", sa.String(50)),
         sa.Column("title", sa.String(100)),
@@ -129,8 +149,12 @@ def upgrade() -> None:
             sa.ForeignKey("opportunities.id"),
         ),
         sa.Column("converted_at", sa.DateTime(timezone=True)),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now()
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), server_default=sa.func.now()
+        ),
     )
 
     op.create_table(
@@ -155,13 +179,19 @@ def upgrade() -> None:
         sa.Column("status", sa.String(50), server_default="new"),
         sa.Column("priority", sa.String(50), server_default="medium"),
         sa.Column("origin", sa.String(50), server_default="web"),
-        sa.Column("owner_id", postgresql.UUID(as_uuid=True), nullable=False, index=True),
+        sa.Column(
+            "owner_id", postgresql.UUID(as_uuid=True), nullable=False, index=True
+        ),
         sa.Column("resolution_notes", sa.Text),
         sa.Column("resolved_by", sa.String(100)),
         sa.Column("resolved_at", sa.DateTime(timezone=True)),
         sa.Column("closed_at", sa.DateTime(timezone=True)),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now()
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), server_default=sa.func.now()
+        ),
     )
 
     op.create_table(
@@ -174,8 +204,12 @@ def upgrade() -> None:
         sa.Column("role", sa.String(50), nullable=False, server_default="user"),
         sa.Column("is_active", sa.Boolean, server_default="true"),
         sa.Column("password_history", sa.JSON, server_default="[]"),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now()
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), server_default=sa.func.now()
+        ),
     )
 
 

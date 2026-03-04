@@ -92,7 +92,10 @@ openapi_tags = [
     {"name": "Auth", "description": "Authentication and user management"},
     {"name": "Accounts", "description": "Account CRUD operations"},
     {"name": "Contacts", "description": "Contact CRUD operations"},
-    {"name": "Opportunities", "description": "Sales pipeline and opportunity management"},
+    {
+        "name": "Opportunities",
+        "description": "Sales pipeline and opportunity management",
+    },
     {"name": "Leads", "description": "Lead management and conversion"},
     {"name": "Cases", "description": "Customer support case management"},
     {"name": "System", "description": "Health checks, metrics, and system endpoints"},
@@ -151,6 +154,7 @@ async def value_error_handler(request, exc: ValueError):
     if "not found" in msg:
         return JSONResponse(status_code=404, content={"detail": str(exc)})
     return JSONResponse(status_code=400, content={"detail": str(exc)})
+
 
 # CORS middleware
 if settings.cors_allowed_origins:
@@ -255,7 +259,13 @@ class PasswordChangeRequest(BaseModel):
     new_password: str
 
 
-@app.post("/auth/register", response_model=User, tags=["Auth"], summary="Register a new user", responses={401: {"description": "Unauthorized"}, 403: {"description": "Forbidden"}})
+@app.post(
+    "/auth/register",
+    response_model=User,
+    tags=["Auth"],
+    summary="Register a new user",
+    responses={401: {"description": "Unauthorized"}, 403: {"description": "Forbidden"}},
+)
 async def register(
     request: RegisterRequest,
     current_user: TokenData = Depends(require_role(["admin"])),
@@ -304,7 +314,12 @@ def _record_failed_login(email: str):
     _login_attempts[email].append(time.time())
 
 
-@app.post("/auth/login", response_model=LoginResponse, tags=["Auth"], summary="Login and obtain access token")
+@app.post(
+    "/auth/login",
+    response_model=LoginResponse,
+    tags=["Auth"],
+    summary="Login and obtain access token",
+)
 async def login(request: LoginRequest):
     _check_brute_force(request.email)
 
@@ -342,7 +357,12 @@ async def login(request: LoginRequest):
     )
 
 
-@app.post("/auth/logout", tags=["Auth"], summary="Logout and revoke token", responses={401: {"description": "Unauthorized"}})
+@app.post(
+    "/auth/logout",
+    tags=["Auth"],
+    summary="Logout and revoke token",
+    responses={401: {"description": "Unauthorized"}},
+)
 async def logout(current_user: TokenData = Depends(get_current_user)):
     """Revoke the current token."""
     if current_user.jti:
@@ -355,7 +375,13 @@ async def logout(current_user: TokenData = Depends(get_current_user)):
     return {"message": "Logged out successfully"}
 
 
-@app.post("/auth/refresh", response_model=LoginResponse, tags=["Auth"], summary="Refresh access token", responses={401: {"description": "Unauthorized"}})
+@app.post(
+    "/auth/refresh",
+    response_model=LoginResponse,
+    tags=["Auth"],
+    summary="Refresh access token",
+    responses={401: {"description": "Unauthorized"}},
+)
 async def refresh_token(current_user: TokenData = Depends(get_current_user)):
     """Issue a new token if the current token is valid."""
     # Revoke the old token
@@ -389,7 +415,12 @@ async def refresh_token(current_user: TokenData = Depends(get_current_user)):
     )
 
 
-@app.post("/auth/change-password", tags=["Auth"], summary="Change user password", responses={401: {"description": "Unauthorized"}})
+@app.post(
+    "/auth/change-password",
+    tags=["Auth"],
+    summary="Change user password",
+    responses={401: {"description": "Unauthorized"}},
+)
 async def change_password(
     request: PasswordChangeRequest,
     current_user: TokenData = Depends(get_current_user),
@@ -655,7 +686,13 @@ async def get_prometheus_metrics(
     )
 
 
-@app.post("/accounts", response_model=AccountResponse, tags=["Accounts"], summary="Create account", responses={401: {"description": "Unauthorized"}})
+@app.post(
+    "/accounts",
+    response_model=AccountResponse,
+    tags=["Accounts"],
+    summary="Create account",
+    responses={401: {"description": "Unauthorized"}},
+)
 async def create_account(
     request: CreateAccountRequest,
     current_user: TokenData = Depends(require_permission(Permission.ACCOUNTS_CREATE)),
@@ -690,7 +727,13 @@ async def create_account(
     return result
 
 
-@app.get("/accounts", response_model=List[AccountResponse], tags=["Accounts"], summary="List accounts", responses={401: {"description": "Unauthorized"}})
+@app.get(
+    "/accounts",
+    response_model=List[AccountResponse],
+    tags=["Accounts"],
+    summary="List accounts",
+    responses={401: {"description": "Unauthorized"}},
+)
 async def list_accounts(
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
@@ -700,7 +743,16 @@ async def list_accounts(
     return await query.execute(limit, offset)
 
 
-@app.get("/accounts/{account_id}", response_model=AccountResponse, tags=["Accounts"], summary="Get account by ID", responses={401: {"description": "Unauthorized"}, 404: {"description": "Account not found"}})
+@app.get(
+    "/accounts/{account_id}",
+    response_model=AccountResponse,
+    tags=["Accounts"],
+    summary="Get account by ID",
+    responses={
+        401: {"description": "Unauthorized"},
+        404: {"description": "Account not found"},
+    },
+)
 async def get_account(
     account_id: str,
     current_user: TokenData = Depends(require_permission(Permission.ACCOUNTS_VIEW)),
@@ -712,7 +764,16 @@ async def get_account(
     return result
 
 
-@app.put("/accounts/{account_id}", response_model=AccountResponse, tags=["Accounts"], summary="Update account", responses={401: {"description": "Unauthorized"}, 404: {"description": "Account not found"}})
+@app.put(
+    "/accounts/{account_id}",
+    response_model=AccountResponse,
+    tags=["Accounts"],
+    summary="Update account",
+    responses={
+        401: {"description": "Unauthorized"},
+        404: {"description": "Account not found"},
+    },
+)
 async def update_account(
     account_id: str,
     request: CreateAccountRequest,
@@ -739,7 +800,13 @@ async def update_account(
     return result
 
 
-@app.post("/contacts", response_model=ContactResponse, tags=["Contacts"], summary="Create contact", responses={401: {"description": "Unauthorized"}})
+@app.post(
+    "/contacts",
+    response_model=ContactResponse,
+    tags=["Contacts"],
+    summary="Create contact",
+    responses={401: {"description": "Unauthorized"}},
+)
 async def create_contact(
     request: CreateContactRequest,
     current_user: TokenData = Depends(require_permission(Permission.CONTACTS_CREATE)),
@@ -772,7 +839,13 @@ async def create_contact(
     return result
 
 
-@app.get("/contacts", response_model=List[ContactResponse], tags=["Contacts"], summary="List contacts", responses={401: {"description": "Unauthorized"}})
+@app.get(
+    "/contacts",
+    response_model=List[ContactResponse],
+    tags=["Contacts"],
+    summary="List contacts",
+    responses={401: {"description": "Unauthorized"}},
+)
 async def list_contacts(
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
@@ -782,7 +855,16 @@ async def list_contacts(
     return await query.execute(limit, offset)
 
 
-@app.get("/contacts/{contact_id}", response_model=ContactResponse, tags=["Contacts"], summary="Get contact by ID", responses={401: {"description": "Unauthorized"}, 404: {"description": "Contact not found"}})
+@app.get(
+    "/contacts/{contact_id}",
+    response_model=ContactResponse,
+    tags=["Contacts"],
+    summary="Get contact by ID",
+    responses={
+        401: {"description": "Unauthorized"},
+        404: {"description": "Contact not found"},
+    },
+)
 async def get_contact(
     contact_id: str,
     current_user: TokenData = Depends(require_permission(Permission.CONTACTS_VIEW)),
@@ -794,7 +876,13 @@ async def get_contact(
     return result
 
 
-@app.get("/accounts/{account_id}/contacts", response_model=List[ContactResponse], tags=["Contacts"], summary="Get contacts by account", responses={401: {"description": "Unauthorized"}})
+@app.get(
+    "/accounts/{account_id}/contacts",
+    response_model=List[ContactResponse],
+    tags=["Contacts"],
+    summary="Get contacts by account",
+    responses={401: {"description": "Unauthorized"}},
+)
 async def get_account_contacts(
     account_id: str,
     current_user: TokenData = Depends(require_permission(Permission.CONTACTS_VIEW)),
@@ -803,7 +891,13 @@ async def get_account_contacts(
     return await query.execute(account_id)
 
 
-@app.post("/opportunities", response_model=OpportunityResponse, tags=["Opportunities"], summary="Create opportunity", responses={401: {"description": "Unauthorized"}})
+@app.post(
+    "/opportunities",
+    response_model=OpportunityResponse,
+    tags=["Opportunities"],
+    summary="Create opportunity",
+    responses={401: {"description": "Unauthorized"}},
+)
 async def create_opportunity(
     request: CreateOpportunityRequest,
     current_user: TokenData = Depends(
@@ -839,7 +933,13 @@ async def create_opportunity(
     return result
 
 
-@app.get("/opportunities", response_model=List[OpportunityResponse], tags=["Opportunities"], summary="List opportunities", responses={401: {"description": "Unauthorized"}})
+@app.get(
+    "/opportunities",
+    response_model=List[OpportunityResponse],
+    tags=["Opportunities"],
+    summary="List opportunities",
+    responses={401: {"description": "Unauthorized"}},
+)
 async def list_opportunities(
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
@@ -851,7 +951,13 @@ async def list_opportunities(
     return await query.execute(limit, offset)
 
 
-@app.get("/opportunities/open", response_model=List[OpportunityResponse], tags=["Opportunities"], summary="Get open opportunities", responses={401: {"description": "Unauthorized"}})
+@app.get(
+    "/opportunities/open",
+    response_model=List[OpportunityResponse],
+    tags=["Opportunities"],
+    summary="Get open opportunities",
+    responses={401: {"description": "Unauthorized"}},
+)
 async def get_open_opportunities(
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
@@ -863,7 +969,16 @@ async def get_open_opportunities(
     return await query.execute(limit, offset)
 
 
-@app.get("/opportunities/{opportunity_id}", response_model=OpportunityResponse, tags=["Opportunities"], summary="Get opportunity by ID", responses={401: {"description": "Unauthorized"}, 404: {"description": "Opportunity not found"}})
+@app.get(
+    "/opportunities/{opportunity_id}",
+    response_model=OpportunityResponse,
+    tags=["Opportunities"],
+    summary="Get opportunity by ID",
+    responses={
+        401: {"description": "Unauthorized"},
+        404: {"description": "Opportunity not found"},
+    },
+)
 async def get_opportunity(
     opportunity_id: str,
     current_user: TokenData = Depends(
@@ -877,7 +992,15 @@ async def get_opportunity(
     return result
 
 
-@app.patch("/opportunities/{opportunity_id}/stage", tags=["Opportunities"], summary="Update opportunity stage", responses={401: {"description": "Unauthorized"}, 404: {"description": "Opportunity not found"}})
+@app.patch(
+    "/opportunities/{opportunity_id}/stage",
+    tags=["Opportunities"],
+    summary="Update opportunity stage",
+    responses={
+        401: {"description": "Unauthorized"},
+        404: {"description": "Opportunity not found"},
+    },
+)
 async def update_opportunity_stage(
     opportunity_id: str,
     request: UpdateStageRequest,
@@ -890,11 +1013,19 @@ async def update_opportunity_stage(
         event_bus=event_bus,
         audit_log=audit_log,
     )
-    result = await command.execute(opportunity_id, request.stage, current_user.user_id, request.reason)
+    result = await command.execute(
+        opportunity_id, request.stage, current_user.user_id, request.reason
+    )
     return result
 
 
-@app.post("/leads", response_model=LeadResponse, tags=["Leads"], summary="Create lead", responses={401: {"description": "Unauthorized"}})
+@app.post(
+    "/leads",
+    response_model=LeadResponse,
+    tags=["Leads"],
+    summary="Create lead",
+    responses={401: {"description": "Unauthorized"}},
+)
 async def create_lead(
     request: CreateLeadRequest,
     current_user: TokenData = Depends(require_permission(Permission.LEADS_CREATE)),
@@ -927,7 +1058,13 @@ async def create_lead(
     return result
 
 
-@app.get("/leads", response_model=List[LeadResponse], tags=["Leads"], summary="List leads", responses={401: {"description": "Unauthorized"}})
+@app.get(
+    "/leads",
+    response_model=List[LeadResponse],
+    tags=["Leads"],
+    summary="List leads",
+    responses={401: {"description": "Unauthorized"}},
+)
 async def list_leads(
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
@@ -937,7 +1074,16 @@ async def list_leads(
     return await query.execute(limit, offset)
 
 
-@app.get("/leads/{lead_id}", response_model=LeadResponse, tags=["Leads"], summary="Get lead by ID", responses={401: {"description": "Unauthorized"}, 404: {"description": "Lead not found"}})
+@app.get(
+    "/leads/{lead_id}",
+    response_model=LeadResponse,
+    tags=["Leads"],
+    summary="Get lead by ID",
+    responses={
+        401: {"description": "Unauthorized"},
+        404: {"description": "Lead not found"},
+    },
+)
 async def get_lead(
     lead_id: str,
     current_user: TokenData = Depends(require_permission(Permission.LEADS_VIEW)),
@@ -949,7 +1095,15 @@ async def get_lead(
     return result
 
 
-@app.post("/leads/{lead_id}/qualify", tags=["Leads"], summary="Qualify a lead", responses={401: {"description": "Unauthorized"}, 404: {"description": "Lead not found"}})
+@app.post(
+    "/leads/{lead_id}/qualify",
+    tags=["Leads"],
+    summary="Qualify a lead",
+    responses={
+        401: {"description": "Unauthorized"},
+        404: {"description": "Lead not found"},
+    },
+)
 async def qualify_lead(
     lead_id: str,
     current_user: TokenData = Depends(require_permission(Permission.LEADS_CONVERT)),
@@ -963,7 +1117,13 @@ async def qualify_lead(
     return result
 
 
-@app.post("/cases", response_model=CaseResponse, tags=["Cases"], summary="Create case", responses={401: {"description": "Unauthorized"}})
+@app.post(
+    "/cases",
+    response_model=CaseResponse,
+    tags=["Cases"],
+    summary="Create case",
+    responses={401: {"description": "Unauthorized"}},
+)
 async def create_case(
     request: CreateCaseRequest,
     current_user: TokenData = Depends(require_permission(Permission.CASES_CREATE)),
@@ -996,7 +1156,13 @@ async def create_case(
     return result
 
 
-@app.get("/cases", response_model=List[CaseResponse], tags=["Cases"], summary="List cases", responses={401: {"description": "Unauthorized"}})
+@app.get(
+    "/cases",
+    response_model=List[CaseResponse],
+    tags=["Cases"],
+    summary="List cases",
+    responses={401: {"description": "Unauthorized"}},
+)
 async def list_cases(
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
@@ -1006,7 +1172,13 @@ async def list_cases(
     return await query.execute(limit, offset)
 
 
-@app.get("/cases/open", response_model=List[CaseResponse], tags=["Cases"], summary="Get open cases", responses={401: {"description": "Unauthorized"}})
+@app.get(
+    "/cases/open",
+    response_model=List[CaseResponse],
+    tags=["Cases"],
+    summary="Get open cases",
+    responses={401: {"description": "Unauthorized"}},
+)
 async def get_open_cases(
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
@@ -1016,7 +1188,16 @@ async def get_open_cases(
     return await query.execute(limit, offset)
 
 
-@app.get("/cases/{case_id}", response_model=CaseResponse, tags=["Cases"], summary="Get case by ID", responses={401: {"description": "Unauthorized"}, 404: {"description": "Case not found"}})
+@app.get(
+    "/cases/{case_id}",
+    response_model=CaseResponse,
+    tags=["Cases"],
+    summary="Get case by ID",
+    responses={
+        401: {"description": "Unauthorized"},
+        404: {"description": "Case not found"},
+    },
+)
 async def get_case(
     case_id: str,
     current_user: TokenData = Depends(require_permission(Permission.CASES_VIEW)),
@@ -1028,7 +1209,15 @@ async def get_case(
     return result
 
 
-@app.patch("/cases/{case_id}/status", tags=["Cases"], summary="Update case status", responses={401: {"description": "Unauthorized"}, 404: {"description": "Case not found"}})
+@app.patch(
+    "/cases/{case_id}/status",
+    tags=["Cases"],
+    summary="Update case status",
+    responses={
+        401: {"description": "Unauthorized"},
+        404: {"description": "Case not found"},
+    },
+)
 async def update_case_status(
     case_id: str,
     request: UpdateStatusRequest,
@@ -1043,7 +1232,15 @@ async def update_case_status(
     return result
 
 
-@app.post("/cases/{case_id}/resolve", tags=["Cases"], summary="Resolve a case", responses={401: {"description": "Unauthorized"}, 404: {"description": "Case not found"}})
+@app.post(
+    "/cases/{case_id}/resolve",
+    tags=["Cases"],
+    summary="Resolve a case",
+    responses={
+        401: {"description": "Unauthorized"},
+        404: {"description": "Case not found"},
+    },
+)
 async def resolve_case(
     case_id: str,
     request: ResolveCaseRequest,
@@ -1054,7 +1251,9 @@ async def resolve_case(
         event_bus=event_bus,
         audit_log=audit_log,
     )
-    result = await command.execute(case_id, request.resolution_notes, request.resolved_by, current_user.user_id)
+    result = await command.execute(
+        case_id, request.resolution_notes, request.resolved_by, current_user.user_id
+    )
     return result
 
 
@@ -1063,7 +1262,16 @@ async def resolve_case(
 # ---------------------------------------------------------------------------
 
 
-@app.put("/contacts/{contact_id}", response_model=ContactResponse, tags=["Contacts"], summary="Update contact", responses={401: {"description": "Unauthorized"}, 404: {"description": "Contact not found"}})
+@app.put(
+    "/contacts/{contact_id}",
+    response_model=ContactResponse,
+    tags=["Contacts"],
+    summary="Update contact",
+    responses={
+        401: {"description": "Unauthorized"},
+        404: {"description": "Contact not found"},
+    },
+)
 async def update_contact(
     contact_id: str,
     request: CreateContactRequest,
@@ -1088,7 +1296,16 @@ async def update_contact(
     return result
 
 
-@app.put("/opportunities/{opportunity_id}", response_model=OpportunityResponse, tags=["Opportunities"], summary="Update opportunity", responses={401: {"description": "Unauthorized"}, 404: {"description": "Opportunity not found"}})
+@app.put(
+    "/opportunities/{opportunity_id}",
+    response_model=OpportunityResponse,
+    tags=["Opportunities"],
+    summary="Update opportunity",
+    responses={
+        401: {"description": "Unauthorized"},
+        404: {"description": "Opportunity not found"},
+    },
+)
 async def update_opportunity(
     opportunity_id: str,
     request: CreateOpportunityRequest,
@@ -1116,7 +1333,16 @@ async def update_opportunity(
     return result
 
 
-@app.post("/accounts/{account_id}/deactivate", response_model=AccountResponse, tags=["Accounts"], summary="Deactivate account", responses={401: {"description": "Unauthorized"}, 404: {"description": "Account not found"}})
+@app.post(
+    "/accounts/{account_id}/deactivate",
+    response_model=AccountResponse,
+    tags=["Accounts"],
+    summary="Deactivate account",
+    responses={
+        401: {"description": "Unauthorized"},
+        404: {"description": "Account not found"},
+    },
+)
 async def deactivate_account(
     account_id: str,
     current_user: TokenData = Depends(require_permission(Permission.ACCOUNTS_EDIT)),
@@ -1136,7 +1362,15 @@ class ConvertLeadRequest(BaseModel):
     opportunity_id: Optional[constr(max_length=100)] = None
 
 
-@app.post("/leads/{lead_id}/convert", tags=["Leads"], summary="Convert lead to account/contact", responses={401: {"description": "Unauthorized"}, 404: {"description": "Lead not found"}})
+@app.post(
+    "/leads/{lead_id}/convert",
+    tags=["Leads"],
+    summary="Convert lead to account/contact",
+    responses={
+        401: {"description": "Unauthorized"},
+        404: {"description": "Lead not found"},
+    },
+)
 async def convert_lead(
     lead_id: str,
     request: ConvertLeadRequest,
@@ -1160,7 +1394,15 @@ async def convert_lead(
     return result
 
 
-@app.post("/cases/{case_id}/close", tags=["Cases"], summary="Close a case", responses={401: {"description": "Unauthorized"}, 404: {"description": "Case not found"}})
+@app.post(
+    "/cases/{case_id}/close",
+    tags=["Cases"],
+    summary="Close a case",
+    responses={
+        401: {"description": "Unauthorized"},
+        404: {"description": "Case not found"},
+    },
+)
 async def close_case(
     case_id: str,
     current_user: TokenData = Depends(require_permission(Permission.CASES_RESOLVE)),
@@ -1179,7 +1421,15 @@ async def close_case(
 # ---------------------------------------------------------------------------
 
 
-@app.delete("/accounts/{account_id}", tags=["Accounts"], summary="Delete account", responses={401: {"description": "Unauthorized"}, 404: {"description": "Account not found"}})
+@app.delete(
+    "/accounts/{account_id}",
+    tags=["Accounts"],
+    summary="Delete account",
+    responses={
+        401: {"description": "Unauthorized"},
+        404: {"description": "Account not found"},
+    },
+)
 async def delete_account(
     account_id: str,
     current_user: TokenData = Depends(require_permission(Permission.ACCOUNTS_DELETE)),
@@ -1199,7 +1449,15 @@ async def delete_account(
     return Response(status_code=204)
 
 
-@app.delete("/contacts/{contact_id}", tags=["Contacts"], summary="Delete contact", responses={401: {"description": "Unauthorized"}, 404: {"description": "Contact not found"}})
+@app.delete(
+    "/contacts/{contact_id}",
+    tags=["Contacts"],
+    summary="Delete contact",
+    responses={
+        401: {"description": "Unauthorized"},
+        404: {"description": "Contact not found"},
+    },
+)
 async def delete_contact(
     contact_id: str,
     current_user: TokenData = Depends(require_permission(Permission.CONTACTS_DELETE)),
@@ -1219,7 +1477,15 @@ async def delete_contact(
     return Response(status_code=204)
 
 
-@app.delete("/opportunities/{opportunity_id}", tags=["Opportunities"], summary="Delete opportunity", responses={401: {"description": "Unauthorized"}, 404: {"description": "Opportunity not found"}})
+@app.delete(
+    "/opportunities/{opportunity_id}",
+    tags=["Opportunities"],
+    summary="Delete opportunity",
+    responses={
+        401: {"description": "Unauthorized"},
+        404: {"description": "Opportunity not found"},
+    },
+)
 async def delete_opportunity(
     opportunity_id: str,
     current_user: TokenData = Depends(
@@ -1241,7 +1507,15 @@ async def delete_opportunity(
     return Response(status_code=204)
 
 
-@app.delete("/leads/{lead_id}", tags=["Leads"], summary="Delete lead", responses={401: {"description": "Unauthorized"}, 404: {"description": "Lead not found"}})
+@app.delete(
+    "/leads/{lead_id}",
+    tags=["Leads"],
+    summary="Delete lead",
+    responses={
+        401: {"description": "Unauthorized"},
+        404: {"description": "Lead not found"},
+    },
+)
 async def delete_lead(
     lead_id: str,
     current_user: TokenData = Depends(require_permission(Permission.LEADS_DELETE)),
@@ -1261,7 +1535,15 @@ async def delete_lead(
     return Response(status_code=204)
 
 
-@app.delete("/cases/{case_id}", tags=["Cases"], summary="Delete case", responses={401: {"description": "Unauthorized"}, 404: {"description": "Case not found"}})
+@app.delete(
+    "/cases/{case_id}",
+    tags=["Cases"],
+    summary="Delete case",
+    responses={
+        401: {"description": "Unauthorized"},
+        404: {"description": "Case not found"},
+    },
+)
 async def delete_case(
     case_id: str,
     current_user: TokenData = Depends(require_permission(Permission.CASES_DELETE)),
