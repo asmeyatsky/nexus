@@ -40,6 +40,13 @@ class AccountHealthScore:
         support_score: int,
         org_id: str,
     ) -> "AccountHealthScore":
+        for name, value in [
+            ("engagement_score", engagement_score),
+            ("revenue_score", revenue_score),
+            ("support_score", support_score),
+        ]:
+            if not 0 <= value <= 100:
+                raise ValueError(f"{name} must be between 0 and 100, got {value}")
         overall = int(
             engagement_score * 0.4 + revenue_score * 0.35 + support_score * 0.25
         )

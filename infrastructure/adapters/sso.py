@@ -5,13 +5,15 @@ Architectural Intent:
 - Multi-provider SSO: Google Workspace, Azure AD, Okta
 - SAML 2.0 protocol support with signature verification
 - Session management with secure tokens
-- XXE protection
+- XXE protection (defusedxml mandatory)
 - CSRF protection for cookie-based sessions
+- Configurable session backend (in-memory default, Redis for production)
 """
 
 from typing import Optional, Dict, Any, List
 from dataclasses import dataclass
 from enum import Enum
+import logging
 import secrets
 import time
 import ipaddress
@@ -19,7 +21,19 @@ import ipaddress
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 
+# defusedxml is MANDATORY -- never fall back to stdlib xml.etree.ElementTree
+try:
+    import defusedxml.ElementTree as SafeET
+except ImportError:
+    raise ImportError(
+        "defusedxml is required for secure SAML XML parsing. "
+        "Install it with: pip install defusedxml"
+    )
+
 from infrastructure.config.settings import settings
+
+
+logger = logging.getLogger(__name__)
 
 
 class SSOProvider(Enum):
@@ -68,19 +82,87 @@ def is_ip_blocked(ip_str: str) -> bool:
     return False
 
 
-class SSOSession:
-    """Secure SSO session management with CSRF protection."""
+class SessionBackend:
+    """Abstract interface for session storage.
+
+    The default in-memory implementation is suitable for development/testing.
+    For production, use a Redis-backed implementation:
+
+        class RedisSessionBackend(SessionBackend):
+            def __init__(self, redis_client):
+                self._redis = redis_client
+
+            def get(self, key):
+                data = self._redis.get(f"session:{key}")
+                return json.loads(data) if data else None
+
+            def set(self, key, value):
+                self._redis.setex(f"session:{key}", 1800, json.dumps(value))
+
+            def delete(self, key):
+                self._redis.delete(f"session:{key}")
+
+            def count(self):
+                return len(self._redis.keys("session:*"))
+    """
+
+    def get(self, key: str) -> Optional[Dict[str, Any]]:
+        raise NotImplementedError
+
+    def set(self, key: str, value: Dict[str, Any]) -> None:
+        raise NotImplementedError
+
+    def delete(self, key: str) -> None:
+        raise NotImplementedError
+
+    def count(self) -> int:
+        raise NotImplementedError
+
+
+class InMemorySessionBackend(SessionBackend):
+    """In-memory session backend for development/testing."""
 
     def __init__(self):
-        self._sessions: Dict[str, Dict[str, Any]] = {}
+        self._store: Dict[str, Dict[str, Any]] = {}
+
+    def get(self, key: str) -> Optional[Dict[str, Any]]:
+        return self._store.get(key)
+
+    def set(self, key: str, value: Dict[str, Any]) -> None:
+        self._store[key] = value
+
+    def delete(self, key: str) -> None:
+        self._store.pop(key, None)
+
+    def count(self) -> int:
+        return len(self._store)
+
+
+class SSOSession:
+    """Secure SSO session management with CSRF protection and max session limits."""
+
+    def __init__(
+        self,
+        backend: Optional[SessionBackend] = None,
+        max_sessions: int = None,
+    ):
+        self._backend = backend or InMemorySessionBackend()
+        self._max_sessions = max_sessions or settings.sso_max_sessions
 
     def create_session(
         self, user_id: str, email: str, provider: SSOProvider, org_id: str
     ) -> tuple[str, str]:
         """Create session and return (session_id, csrf_token)."""
+        # Enforce max session limit to prevent unbounded memory growth
+        if self._backend.count() >= self._max_sessions:
+            raise RuntimeError(
+                f"Maximum session limit ({self._max_sessions}) reached. "
+                "Cannot create new sessions until existing sessions expire."
+            )
+
         session_id = secrets.token_urlsafe(32)
         csrf_token = secrets.token_urlsafe(32)
-        self._sessions[session_id] = {
+        self._backend.set(session_id, {
             "user_id": user_id,
             "email": email,
             "provider": provider.value,
@@ -88,32 +170,33 @@ class SSOSession:
             "csrf_token": csrf_token,
             "created_at": time.time(),
             "last_activity": time.time(),
-        }
+        })
         return session_id, csrf_token
 
     def validate_session(
         self, session_id: str, max_age: int = 1800
     ) -> Optional[Dict]:  # 30 min default
-        session = self._sessions.get(session_id)
+        session = self._backend.get(session_id)
         if not session:
             return None
 
         if time.time() - session["last_activity"] > max_age:
-            del self._sessions[session_id]
+            self._backend.delete(session_id)
             return None
 
         session["last_activity"] = time.time()
+        self._backend.set(session_id, session)
         return session
 
     def validate_csrf(self, session_id: str, csrf_token: str) -> bool:
         """Validate CSRF token against session."""
-        session = self._sessions.get(session_id)
+        session = self._backend.get(session_id)
         if not session:
             return False
         return secrets.compare_digest(session.get("csrf_token", ""), csrf_token)
 
     def destroy_session(self, session_id: str):
-        self._sessions.pop(session_id, None)
+        self._backend.delete(session_id)
 
 
 class SAMLAuthHandler:
@@ -130,6 +213,18 @@ class SAMLAuthHandler:
         """Generate secure SAML AuthnRequest."""
         import uuid
 
+        saml_issuer = settings.saml_issuer
+        saml_acs_url = settings.saml_acs_url
+
+        if not saml_issuer:
+            raise ValueError(
+                "SAML_ISSUER must be configured in settings/environment"
+            )
+        if not saml_acs_url:
+            raise ValueError(
+                "SAML_ACS_URL must be configured in settings/environment"
+            )
+
         request_id = f"_{uuid.uuid4()}"
 
         saml_request = f"""<?xml version="1.0" encoding="UTF-8"?>
@@ -137,9 +232,9 @@ class SAMLAuthHandler:
     ID="{request_id}"
     Version="2.0"
     IssueInstant="{time.strftime("%Y-%m-%dT%H:%M:%SZ")}"
-    AssertionConsumerServiceURL="https://your-domain.com/auth/saml/callback"
+    AssertionConsumerServiceURL="{saml_acs_url}"
     ProtocolBinding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST">
-    <saml:Issuer xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion">urn:your:issuer</saml:Issuer>
+    <saml:Issuer xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion">{saml_issuer}</saml:Issuer>
     <samlp:NameIDPolicy Format="urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress"/>
 </samlp:AuthnRequest>"""
         import base64
@@ -148,55 +243,85 @@ class SAMLAuthHandler:
 
     def parse_response(self, saml_response: str) -> Optional[Dict[str, Any]]:
         """Parse and verify SAML Response with XXE protection."""
-        try:
-            import defusedxml.ElementTree as ET
-        except ImportError:
-            import xml.etree.ElementTree as ET
         import base64
 
         try:
             # Decode base64
             decoded = base64.b64decode(saml_response).decode("utf-8")
 
-            # Parse XML — defusedxml blocks XXE, entity expansion, DTDs by default
-            root = ET.fromstring(decoded)
+            # Parse XML -- defusedxml blocks XXE, entity expansion, DTDs by default
+            root = SafeET.fromstring(decoded)
 
-            # Verify response has signature — reject unsigned responses
+            # Verify response has signature -- reject unsigned responses
             signature = root.find(".//{http://www.w3.org/2000/09/xmldsig#}Signature")
             if signature is None:
-                print("ERROR: Unsigned SAML response rejected")
+                logger.error("Unsigned SAML response rejected")
                 return None
 
-            ns = {
-                "saml": "urn:oasis:names:tc:SAML:2.0:assertion",
-                "samlp": "urn:oasis:names:tc:SAML:2.0:protocol",
-                "ds": "http://www.w3.org/2000/09/xmldsig",
-            }
+            # CRITICAL: Cryptographic signature verification is REQUIRED.
+            # The mere presence of a <Signature> element does NOT prove
+            # authenticity -- an attacker can insert a fake Signature element.
+            # A production deployment MUST use a library such as signxml or
+            # python3-saml to verify the XML signature against the IdP's
+            # X.509 certificate.
+            raise NotImplementedError(
+                "SAML cryptographic signature verification is required but "
+                "not yet implemented. Use a library such as signxml or "
+                "python3-saml to verify the XML digital signature against "
+                "the IdP certificate before trusting the assertion."
+            )
 
-            issuer = root.find(".//saml:Issuer", ns)
-            name_id = root.find(".//saml:NameID", ns)
-            attributes = {}
-
-            for attr in root.findall(".//saml:Attribute", ns):
-                name = attr.get("Name")
-                values = [v.text for v in attr.findall(".//saml:AttributeValue", ns)]
-                if name and values:
-                    attributes[name] = values[0] if len(values) == 1 else values
-
-            return {
-                "issuer": issuer.text if issuer is not None else None,
-                "email": name_id.text
-                if name_id is not None
-                else attributes.get("email"),
-                "attributes": attributes,
-                "session_index": root.get("SessionIndex"),
-            }
-        except ET.ParseError as e:
-            print(f"SAML parse error: {e}")
+        except NotImplementedError:
+            raise
+        except SafeET.ParseError as e:
+            logger.error("SAML parse error: %s", e)
             return None
         except Exception as e:
-            print(f"SAML processing error: {e}")
+            logger.error("SAML processing error: %s", e)
             return None
+
+
+def _get_redirect_uri_allowlist() -> List[str]:
+    """Parse the SSO redirect URI allowlist from settings."""
+    raw = settings.sso_redirect_uri_allowlist
+    if not raw:
+        return []
+    return [uri.strip() for uri in raw.split(",") if uri.strip()]
+
+
+def validate_redirect_uri(redirect_uri: str) -> bool:
+    """Validate redirect_uri against the configured allowlist.
+
+    Returns True if the redirect_uri is in the allowlist, False otherwise.
+    If no allowlist is configured, rejects all redirect URIs for safety.
+    """
+    from urllib.parse import urlparse
+
+    allowlist = _get_redirect_uri_allowlist()
+    if not allowlist:
+        logger.warning(
+            "SSO_REDIRECT_URI_ALLOWLIST is not configured; "
+            "rejecting redirect_uri=%s",
+            redirect_uri,
+        )
+        return False
+
+    parsed = urlparse(redirect_uri)
+    # Require HTTPS (or http for localhost in development)
+    if parsed.scheme not in ("https", "http"):
+        return False
+
+    for allowed in allowlist:
+        allowed_parsed = urlparse(allowed)
+        # Match scheme + netloc + path prefix
+        if (
+            parsed.scheme == allowed_parsed.scheme
+            and parsed.netloc == allowed_parsed.netloc
+            and parsed.path.startswith(allowed_parsed.path)
+        ):
+            return True
+
+    return False
 
 
 class GoogleSSOHandler:
@@ -215,6 +340,12 @@ class GoogleSSOHandler:
     def get_authorization_url(self, state: str, redirect_uri: str) -> str:
         from urllib.parse import urlencode
 
+        # Validate redirect_uri against allowlist to prevent open redirect
+        if not validate_redirect_uri(redirect_uri):
+            raise ValueError(
+                f"redirect_uri is not in the configured allowlist: {redirect_uri}"
+            )
+
         params = {
             "client_id": self.client_id,
             "redirect_uri": redirect_uri,
@@ -231,6 +362,12 @@ class GoogleSSOHandler:
 
     async def exchange_code(self, code: str, redirect_uri: str) -> Optional[Dict]:
         import httpx
+
+        # Validate redirect_uri against allowlist to prevent open redirect
+        if not validate_redirect_uri(redirect_uri):
+            raise ValueError(
+                f"redirect_uri is not in the configured allowlist: {redirect_uri}"
+            )
 
         async with httpx.AsyncClient() as client:
             response = await client.post(

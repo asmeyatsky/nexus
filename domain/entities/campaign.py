@@ -8,8 +8,13 @@ Architectural Intent:
 
 from dataclasses import dataclass, field
 from datetime import datetime, UTC
+from decimal import Decimal
 from typing import Optional
 from enum import Enum
+
+VALID_CURRENCIES = frozenset({
+    "USD", "EUR", "GBP", "JPY", "CAD", "AUD", "CHF", "CNY", "INR", "BRL",
+})
 
 
 class CampaignStatus(Enum):
@@ -37,22 +42,28 @@ class Campaign:
     status: CampaignStatus
     start_date: Optional[datetime]
     end_date: Optional[datetime]
-    budget: float
+    budget: Decimal
     currency: str
     owner_id: str
     org_id: str
     description: str = ""
-    expected_revenue: float = 0.0
-    actual_cost: float = 0.0
+    expected_revenue: Decimal = Decimal("0")
+    actual_cost: Decimal = Decimal("0")
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+
+    def __post_init__(self):
+        if self.currency not in VALID_CURRENCIES:
+            raise ValueError(
+                f"Invalid currency: {self.currency}. Must be one of {sorted(VALID_CURRENCIES)}"
+            )
 
     @staticmethod
     def create(
         id: str,
         name: str,
         campaign_type: CampaignType,
-        budget: float,
+        budget: Decimal,
         currency: str,
         owner_id: str,
         org_id: str,

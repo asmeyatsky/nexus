@@ -4,6 +4,7 @@ Contact Repository Implementation
 Architectural Intent:
 - Implements ContactRepositoryPort
 - Adapter for PostgreSQL via SQLAlchemy
+- Enforces tenant isolation via org_id filtering
 """
 
 from typing import Optional, List, Any
@@ -23,12 +24,14 @@ def _get_column_value(model: Any, attr: str, default: Any = None) -> Any:
 
 
 class ContactRepository:
-    def __init__(self, session: AsyncSession):
+    def __init__(self, session: AsyncSession, org_id: str):
         self.session = session
+        self.org_id = org_id
 
     async def save(self, contact: Contact) -> Contact:
         model = ContactModel(
             id=contact.id,
+            org_id=self.org_id,
             account_id=contact.account_id,
             first_name=contact.first_name,
             last_name=contact.last_name,
@@ -41,14 +44,21 @@ class ContactRepository:
             created_at=contact.created_at,
             updated_at=contact.updated_at,
         )
-        self.session.add(model)
-        await self.session.commit()
-        await self.session.refresh(model)
+        try:
+            merged = await self.session.merge(model)
+            await self.session.commit()
+            await self.session.refresh(merged)
+        except Exception:
+            await self.session.rollback()
+            raise
         return contact
 
     async def get_by_id(self, contact_id: UUID) -> Optional[Contact]:
         result = await self.session.execute(
-            select(ContactModel).where(ContactModel.id == contact_id)
+            select(ContactModel).where(
+                ContactModel.id == contact_id,
+                ContactModel.org_id == self.org_id,
+            )
         )
         model = result.scalar_one_or_none()
         if not model:
@@ -57,7 +67,10 @@ class ContactRepository:
 
     async def get_by_email(self, email: str) -> Optional[Contact]:
         result = await self.session.execute(
-            select(ContactModel).where(ContactModel.email == email)
+            select(ContactModel).where(
+                ContactModel.email == email,
+                ContactModel.org_id == self.org_id,
+            )
         )
         model = result.scalar_one_or_none()
         if not model:
@@ -66,7 +79,10 @@ class ContactRepository:
 
     async def get_by_account(self, account_id: UUID) -> List[Contact]:
         result = await self.session.execute(
-            select(ContactModel).where(ContactModel.account_id == account_id)
+            select(ContactModel).where(
+                ContactModel.account_id == account_id,
+                ContactModel.org_id == self.org_id,
+            )
         )
         models = result.scalars().all()
         return [self._to_entity(m) for m in models]
@@ -74,6 +90,7 @@ class ContactRepository:
     async def get_all(self, limit: int = 100, offset: int = 0) -> List[Contact]:
         result = await self.session.execute(
             select(ContactModel)
+            .where(ContactModel.org_id == self.org_id)
             .order_by(ContactModel.created_at.desc())
             .limit(limit)
             .offset(offset)
@@ -83,19 +100,29 @@ class ContactRepository:
 
     async def get_by_owner(self, owner_id: UUID) -> List[Contact]:
         result = await self.session.execute(
-            select(ContactModel).where(ContactModel.owner_id == owner_id)
+            select(ContactModel).where(
+                ContactModel.owner_id == owner_id,
+                ContactModel.org_id == self.org_id,
+            )
         )
         models = result.scalars().all()
         return [self._to_entity(m) for m in models]
 
     async def delete(self, contact_id: UUID) -> None:
         result = await self.session.execute(
-            select(ContactModel).where(ContactModel.id == contact_id)
+            select(ContactModel).where(
+                ContactModel.id == contact_id,
+                ContactModel.org_id == self.org_id,
+            )
         )
         model = result.scalar_one_or_none()
         if model:
-            await self.session.delete(model)
-            await self.session.commit()
+            try:
+                await self.session.delete(model)
+                await self.session.commit()
+            except Exception:
+                await self.session.rollback()
+                raise
 
     def _to_entity(self, model: ContactModel) -> Contact:
         phone_val = _get_column_value(model, "phone")

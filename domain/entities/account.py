@@ -114,6 +114,8 @@ class Account:
         )
 
     def deactivate(self) -> "Account":
+        if not self.is_active:
+            return self
         now = datetime.now(UTC)
         return replace(
             self,

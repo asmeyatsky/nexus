@@ -22,6 +22,11 @@ class MigrationStatus(Enum):
     ROLLED_BACK = "rolled_back"
 
 
+# Partial is not in the original Enum but used below; keep compat via string.
+class _MigrationStatusCompat:
+    PARTIAL = "partial"
+
+
 @dataclass
 class MigrationConfig:
     salesforce_client_id: str
@@ -51,6 +56,43 @@ class MigrationResult:
     started_at: datetime = field(default_factory=datetime.now)
     completed_at: Optional[datetime] = None
     sf_id_to_nexus_id: Dict[str, str] = field(default_factory=dict)
+
+
+# Allowlist of valid Salesforce standard object names to prevent SOQL injection.
+_ALLOWED_SF_OBJECTS = frozenset({
+    "Account",
+    "Contact",
+    "Opportunity",
+    "Lead",
+    "Case",
+    "Campaign",
+    "Task",
+    "Event",
+    "User",
+    "Product2",
+    "Pricebook2",
+    "PricebookEntry",
+    "Order",
+    "OrderItem",
+    "Contract",
+    "Quote",
+    "QuoteLineItem",
+    "Asset",
+    "Solution",
+})
+
+
+def _validate_object_name(object_name: str) -> None:
+    """Validate the Salesforce object name against an allowlist.
+
+    Raises:
+        ValueError: If the object name is not in the allowlist.
+    """
+    if object_name not in _ALLOWED_SF_OBJECTS:
+        raise ValueError(
+            f"Invalid Salesforce object name: {object_name!r}. "
+            f"Allowed objects: {sorted(_ALLOWED_SF_OBJECTS)}"
+        )
 
 
 class SalesforceClient:
@@ -102,6 +144,8 @@ class SalesforceClient:
         self, object_name: str, batch_size: int = 2000
     ) -> List[Dict]:
         """Get all records from a Salesforce object using pagination."""
+        _validate_object_name(object_name)
+
         records = []
         offset = 0
 

@@ -10,6 +10,7 @@ Architectural Intent:
 from typing import Dict, Any, Optional
 from dataclasses import dataclass
 from enum import Enum
+import uuid
 
 
 class MCPErrorCode(Enum):
@@ -47,11 +48,13 @@ class BaseMCPClient:
         """Make an MCP call to the server."""
         import httpx
 
+        request_id = uuid.uuid4().hex
+
         request = {
             "jsonrpc": "2.0",
             "method": method,
             "params": params or {},
-            "id": "1",
+            "id": request_id,
         }
 
         try:
@@ -68,7 +71,8 @@ class BaseMCPClient:
                 error={
                     "code": MCPErrorCode.INTERNAL_ERROR.value,
                     "message": str(e),
-                }
+                },
+                id=request_id,
             )
 
 

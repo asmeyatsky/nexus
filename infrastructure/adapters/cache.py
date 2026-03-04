@@ -11,6 +11,8 @@ from typing import Optional, Any, Dict, List
 from dataclasses import dataclass
 import json
 import hashlib
+import os
+import re
 from enum import Enum
 import redis.asyncio as redis
 
@@ -29,11 +31,22 @@ class CacheConfig:
     compress: bool = False
 
 
+# Characters that have special meaning in Redis glob patterns.
+_GLOB_SPECIAL = re.compile(r"([*?\[\]])")
+
+
+def _escape_glob(value: str) -> str:
+    """Escape glob special characters so they are matched literally."""
+    return _GLOB_SPECIAL.sub(r"[\1]", value)
+
+
 class RedisCache:
     """Async Redis caching layer."""
 
-    def __init__(self, redis_url: str = "redis://localhost:6379"):
-        self.redis_url = redis_url
+    def __init__(self, redis_url: str = None):
+        self.redis_url = redis_url or os.getenv(
+            "REDIS_URL", "redis://localhost:6379"
+        )
         self._client: Optional[redis.Redis] = None
         self._configs: Dict[CacheTier, CacheConfig] = {
             CacheTier.SESSION: CacheConfig(ttl=86400),
@@ -101,7 +114,9 @@ class RedisCache:
                 break
 
     async def invalidate_entity(self, entity_type: str, entity_id: str):
-        await self.delete_pattern(f"*{entity_type}:{entity_id}*")
+        safe_type = _escape_glob(entity_type)
+        safe_id = _escape_glob(entity_id)
+        await self.delete_pattern(f"*{safe_type}:{safe_id}*")
 
     def generate_key(
         self,
@@ -129,7 +144,8 @@ class RedisCache:
         await self.set(query_key, results, CacheTier.QUERY)
 
     async def invalidate_org_cache(self, org_id: str):
-        await self.delete_pattern(f"nexus:*:{org_id}:*")
+        safe_org_id = _escape_glob(org_id)
+        await self.delete_pattern(f"nexus:*:{safe_org_id}:*")
 
 
 redis_cache = RedisCache()
@@ -143,13 +159,16 @@ class CacheInvalidationService:
 
     async def on_entity_update(self, entity_type: str, entity_id: str, org_id: str):
         await self.cache.invalidate_entity(entity_type, entity_id)
-        await self.cache.delete_pattern(f"nexus:query:{org_id}:{entity_type}*")
+        safe_org_id = _escape_glob(org_id)
+        safe_type = _escape_glob(entity_type)
+        await self.cache.delete_pattern(f"nexus:query:{safe_org_id}:{safe_type}*")
 
     async def on_entity_delete(self, entity_type: str, entity_id: str, org_id: str):
         await self.on_entity_update(entity_type, entity_id, org_id)
 
     async def on_user_login(self, user_id: str, org_id: str):
-        await self.cache.delete_pattern(f"nexus:session:user:{user_id}*")
+        safe_user_id = _escape_glob(user_id)
+        await self.cache.delete_pattern(f"nexus:session:user:{safe_user_id}*")
 
     async def on_org_settings_change(self, org_id: str):
         await self.cache.invalidate_org_cache(org_id)

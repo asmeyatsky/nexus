@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
 import asyncio
+import contextvars
 import json
 import logging
 import os
@@ -25,21 +26,17 @@ import uuid
 # 1. Structured Logging
 # ---------------------------------------------------------------------------
 
-_correlation_id_var: Optional[str] = None
-_correlation_id_lock = threading.Lock()
+_correlation_id_var = contextvars.ContextVar("correlation_id", default=None)
 
 
 class _CorrelationIdStorage:
-    """Thread-safe + asyncio-safe correlation ID storage."""
-
-    def __init__(self) -> None:
-        self._local = threading.local()
+    """Asyncio-safe correlation ID storage using contextvars."""
 
     def get(self) -> Optional[str]:
-        return getattr(self._local, "correlation_id", None)
+        return _correlation_id_var.get()
 
     def set(self, value: Optional[str]) -> None:
-        self._local.correlation_id = value
+        _correlation_id_var.set(value)
 
 
 correlation_id_ctx = _CorrelationIdStorage()
@@ -471,7 +468,7 @@ class TracingMiddleware:
     For every incoming HTTP request this middleware will:
     1. Generate (or propagate) a correlation/request ID.
     2. Store the ID in ``request.state`` (Starlette convention) and set it on
-       the thread-local :data:`correlation_id_ctx` so that downstream log
+       the context-var :data:`correlation_id_ctx` so that downstream log
        calls automatically include it.
     3. Log structured entries for request start and end (with timing).
     4. Append an ``X-Request-ID`` response header.
@@ -563,5 +560,5 @@ class TracingMiddleware:
                 },
             )
 
-            # Clean up thread-local correlation ID.
+            # Clean up context-var correlation ID.
             correlation_id_ctx.set(None)

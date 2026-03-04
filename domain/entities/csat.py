@@ -20,6 +20,10 @@ class CSATSurvey:
     org_id: str
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
+    def __post_init__(self):
+        if not 1 <= self.score <= 5:
+            raise ValueError("CSAT score must be between 1 and 5")
+
     @staticmethod
     def create(
         id: str,

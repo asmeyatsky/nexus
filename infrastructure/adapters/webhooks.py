@@ -16,9 +16,17 @@ from enum import Enum
 import asyncio
 import hashlib
 import hmac
+import logging
+import secrets
 import time
 import ipaddress
 import httpx
+
+
+logger = logging.getLogger(__name__)
+
+# Maximum length for stored response body snippets (for debugging only)
+_MAX_RESPONSE_BODY_LEN = 256
 
 
 # Internal IP ranges to block for SSRF prevention
@@ -60,7 +68,7 @@ def is_url_safe(url: str) -> tuple[bool, str]:
                 if ip in ipaddress.ip_network(blocked):
                     return False, "Internal IPs are not allowed"
         except ValueError:
-            # Hostname is not an IP — resolve it to check for DNS rebinding
+            # Hostname is not an IP -- resolve it to check for DNS rebinding
             import socket
 
             try:
@@ -83,8 +91,8 @@ def is_url_safe(url: str) -> tuple[bool, str]:
 
         return True, "allowed"
 
-    except Exception as e:
-        return False, f"URL validation error: {str(e)}"
+    except Exception:
+        return False, "URL validation error"
 
 
 class WebhookEvent(Enum):
@@ -155,7 +163,7 @@ class WebhookService:
             id=str(uuid4()),
             url=url,
             events=events,
-            secret=secret or uuid4().hex,
+            secret=secret or secrets.token_hex(32),
             org_id=org_id,
         )
         self._webhooks[webhook.id] = webhook
@@ -211,7 +219,7 @@ class WebhookService:
         is_safe, reason = is_url_safe(webhook.url)
         if not is_safe:
             delivery.status = "failed"
-            delivery.response_body = f"URL validation failed: {reason}"
+            delivery.response_body = "URL validation failed"
             return
 
         for attempt in range(len(self._retry_delays) + 1):
@@ -224,7 +232,8 @@ class WebhookService:
                     )
 
                     delivery.response_code = response.status_code
-                    delivery.response_body = response.text[:1000]
+                    # Truncate response body to prevent storing large/sensitive payloads
+                    delivery.response_body = response.text[:_MAX_RESPONSE_BODY_LEN] if response.text else None
                     delivery.attempts = attempt + 1
 
                     if 200 <= response.status_code < 300:
@@ -236,9 +245,9 @@ class WebhookService:
                     else:
                         delivery.status = "failed"
 
-            except Exception as e:
+            except Exception:
                 delivery.status = "failed"
-                delivery.response_body = str(e)[:1000]
+                delivery.response_body = "Delivery failed due to a connection error"
                 delivery.attempts = attempt + 1
 
             if attempt < len(self._retry_delays):

@@ -75,6 +75,7 @@ class UpdateOpportunityStageCommand:
         if not opportunity:
             raise ValueError(f"Opportunity {opportunity_id} not found")
 
+        old_stage = opportunity.stage.value
         stage = OpportunityStage(new_stage)
         updated = opportunity.change_stage(stage, reason)
 
@@ -87,7 +88,7 @@ class UpdateOpportunityStageCommand:
             action="STAGE_CHANGE",
             resource_type="Opportunity",
             resource_id=str(saved_opportunity.id),
-            details={"old_stage": new_stage, "new_stage": new_stage},
+            details={"old_stage": old_stage, "new_stage": new_stage},
         )
 
         return OpportunityDTO.from_entity(saved_opportunity)

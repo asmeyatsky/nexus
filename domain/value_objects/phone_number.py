@@ -30,14 +30,23 @@ class PhoneNumber:
     def create(phone: str) -> "PhoneNumber":
         cleaned = re.sub(r"[\s\-\(\)]", "", phone)
         if cleaned.startswith("+"):
-            code, number = cleaned[1:3], cleaned[3:]
-            return PhoneNumber(country_code=f"+{code}", number=number)
+            digits = cleaned[1:]
+            # Try 1, 2, and 3-digit country codes to find a valid parse
+            for code_len in (1, 2, 3):
+                if len(digits) > code_len:
+                    code = digits[:code_len]
+                    number = digits[code_len:]
+                    try:
+                        return PhoneNumber(country_code=f"+{code}", number=number)
+                    except ValueError:
+                        continue
+            raise ValueError(f"Invalid phone number: {cleaned}")
         elif len(cleaned) == 10:
             return PhoneNumber(country_code="+1", number=cleaned)
         elif len(cleaned) == 11 and cleaned.startswith("1"):
             return PhoneNumber(country_code="+1", number=cleaned[1:])
         else:
-            return PhoneNumber(country_code="+44", number=cleaned)
+            raise ValueError(f"Cannot parse phone number: {phone}. Provide in E.164 format (+<country_code><number>).")
 
     @property
     def formatted(self) -> str:

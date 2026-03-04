@@ -170,7 +170,13 @@ async def test_close_case():
         h = _auth()
         aid = await _create_account(c, h)
         caseid = await _create_case(c, h, aid, "CL01")
-        # Resolve first (required before close)
+        # Transition to in_progress first (required before resolve)
+        await c.patch(
+            f"/cases/{caseid}/status",
+            params={"status": "in_progress"},
+            headers=h,
+        )
+        # Resolve (required before close)
         await c.post(
             f"/cases/{caseid}/resolve",
             params={

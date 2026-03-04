@@ -135,7 +135,7 @@ if settings.cors_allowed_origins:
         allow_origins=settings.cors_allowed_origins.split(","),
         allow_credentials=settings.cors_allow_credentials,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
-        allow_headers=["*"],
+        allow_headers=["Authorization", "Content-Type", "Accept", "X-Request-ID"],
     )
 
 app.add_middleware(
@@ -691,7 +691,7 @@ async def update_account(
         audit_log=audit_log,
     )
     try:
-        result = await command.execute(account_id, dto, request.owner_id)
+        result = await command.execute(account_id, dto, current_user.user_id)
         return result
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -837,7 +837,6 @@ async def get_open_opportunities(
 async def update_opportunity_stage(
     opportunity_id: str,
     stage: str,
-    user_id: str,
     reason: Optional[str] = None,
     current_user: TokenData = Depends(
         require_permission(Permission.OPPORTUNITIES_EDIT)
@@ -848,7 +847,7 @@ async def update_opportunity_stage(
         event_bus=event_bus,
         audit_log=audit_log,
     )
-    result = await command.execute(opportunity_id, stage, user_id, reason)
+    result = await command.execute(opportunity_id, stage, current_user.user_id, reason)
     return result
 
 
@@ -910,7 +909,6 @@ async def get_lead(
 @app.post("/leads/{lead_id}/qualify")
 async def qualify_lead(
     lead_id: str,
-    user_id: str,
     current_user: TokenData = Depends(require_permission(Permission.LEADS_CONVERT)),
 ):
     command = QualifyLeadCommand(
@@ -918,7 +916,7 @@ async def qualify_lead(
         event_bus=event_bus,
         audit_log=audit_log,
     )
-    result = await command.execute(lead_id, user_id)
+    result = await command.execute(lead_id, current_user.user_id)
     return result
 
 
@@ -989,7 +987,6 @@ async def get_open_cases(
 async def update_case_status(
     case_id: str,
     status: str,
-    user_id: str,
     current_user: TokenData = Depends(require_permission(Permission.CASES_EDIT)),
 ):
     command = UpdateCaseStatusCommand(
@@ -997,7 +994,7 @@ async def update_case_status(
         event_bus=event_bus,
         audit_log=audit_log,
     )
-    result = await command.execute(case_id, status, user_id)
+    result = await command.execute(case_id, status, current_user.user_id)
     return result
 
 
@@ -1006,7 +1003,6 @@ async def resolve_case(
     case_id: str,
     resolution_notes: str,
     resolved_by: str,
-    user_id: str,
     current_user: TokenData = Depends(require_permission(Permission.CASES_RESOLVE)),
 ):
     command = ResolveCaseCommand(
@@ -1014,7 +1010,7 @@ async def resolve_case(
         event_bus=event_bus,
         audit_log=audit_log,
     )
-    result = await command.execute(case_id, resolution_notes, resolved_by, user_id)
+    result = await command.execute(case_id, resolution_notes, resolved_by, current_user.user_id)
     return result
 
 
@@ -1045,7 +1041,7 @@ async def update_contact(
         audit_log=audit_log,
     )
     try:
-        result = await command.execute(contact_id, dto, request.owner_id)
+        result = await command.execute(contact_id, dto, current_user.user_id)
         return result
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -1076,7 +1072,7 @@ async def update_opportunity(
         audit_log=audit_log,
     )
     try:
-        result = await command.execute(opportunity_id, dto, request.owner_id)
+        result = await command.execute(opportunity_id, dto, current_user.user_id)
         return result
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -1164,6 +1160,13 @@ async def delete_account(
     if not result:
         raise HTTPException(status_code=404, detail="Account not found")
     await account_repo.delete(account_id)
+    await audit_log.log(
+        user_id=current_user.user_id,
+        action="DELETE",
+        resource_type="Account",
+        resource_id=account_id,
+        details={"name": result.name},
+    )
     return Response(status_code=204)
 
 
@@ -1177,6 +1180,13 @@ async def delete_contact(
     if not result:
         raise HTTPException(status_code=404, detail="Contact not found")
     await contact_repo.delete(contact_id)
+    await audit_log.log(
+        user_id=current_user.user_id,
+        action="DELETE",
+        resource_type="Contact",
+        resource_id=contact_id,
+        details={"name": f"{result.first_name} {result.last_name}"},
+    )
     return Response(status_code=204)
 
 
@@ -1192,6 +1202,13 @@ async def delete_opportunity(
     if not result:
         raise HTTPException(status_code=404, detail="Opportunity not found")
     await opportunity_repo.delete(opportunity_id)
+    await audit_log.log(
+        user_id=current_user.user_id,
+        action="DELETE",
+        resource_type="Opportunity",
+        resource_id=opportunity_id,
+        details={"name": result.name},
+    )
     return Response(status_code=204)
 
 
@@ -1205,6 +1222,13 @@ async def delete_lead(
     if not result:
         raise HTTPException(status_code=404, detail="Lead not found")
     await lead_repo.delete(lead_id)
+    await audit_log.log(
+        user_id=current_user.user_id,
+        action="DELETE",
+        resource_type="Lead",
+        resource_id=lead_id,
+        details={"name": f"{result.first_name} {result.last_name}"},
+    )
     return Response(status_code=204)
 
 
@@ -1218,4 +1242,11 @@ async def delete_case(
     if not result:
         raise HTTPException(status_code=404, detail="Case not found")
     await case_repo.delete(case_id)
+    await audit_log.log(
+        user_id=current_user.user_id,
+        action="DELETE",
+        resource_type="Case",
+        resource_id=case_id,
+        details={"case_number": result.case_number, "subject": result.subject},
+    )
     return Response(status_code=204)

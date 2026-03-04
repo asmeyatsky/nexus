@@ -2,6 +2,7 @@
 Case Repository Implementation
 
 Implements CaseRepositoryPort with SQLAlchemy.
+Enforces tenant isolation via org_id filtering.
 """
 
 from typing import Optional, List, Any
@@ -15,17 +16,20 @@ from infrastructure.database import CaseModel
 
 
 def _get_column_value(model: Any, attr: str, default: Any = None) -> Any:
+    """Extract value from SQLAlchemy model column at runtime."""
     value = getattr(model, attr, default)
     return value if value is not None else default
 
 
 class CaseRepository:
-    def __init__(self, session: AsyncSession):
+    def __init__(self, session: AsyncSession, org_id: str):
         self.session = session
+        self.org_id = org_id
 
     async def save(self, case: Case) -> Case:
         model = CaseModel(
             id=case.id,
+            org_id=self.org_id,
             case_number=case.case_number,
             subject=case.subject,
             description=case.description,
@@ -42,14 +46,21 @@ class CaseRepository:
             created_at=case.created_at,
             updated_at=case.updated_at,
         )
-        merged = await self.session.merge(model)
-        await self.session.commit()
-        await self.session.refresh(merged)
+        try:
+            merged = await self.session.merge(model)
+            await self.session.commit()
+            await self.session.refresh(merged)
+        except Exception:
+            await self.session.rollback()
+            raise
         return case
 
     async def get_by_id(self, case_id: UUID) -> Optional[Case]:
         result = await self.session.execute(
-            select(CaseModel).where(CaseModel.id == case_id)
+            select(CaseModel).where(
+                CaseModel.id == case_id,
+                CaseModel.org_id == self.org_id,
+            )
         )
         model = result.scalar_one_or_none()
         if not model:
@@ -58,7 +69,10 @@ class CaseRepository:
 
     async def get_by_case_number(self, case_number: str) -> Optional[Case]:
         result = await self.session.execute(
-            select(CaseModel).where(CaseModel.case_number == case_number)
+            select(CaseModel).where(
+                CaseModel.case_number == case_number,
+                CaseModel.org_id == self.org_id,
+            )
         )
         model = result.scalar_one_or_none()
         if not model:
@@ -67,13 +81,17 @@ class CaseRepository:
 
     async def get_by_account(self, account_id: UUID) -> List[Case]:
         result = await self.session.execute(
-            select(CaseModel).where(CaseModel.account_id == account_id)
+            select(CaseModel).where(
+                CaseModel.account_id == account_id,
+                CaseModel.org_id == self.org_id,
+            )
         )
         return [self._to_entity(m) for m in result.scalars().all()]
 
     async def get_all(self, limit: int = 100, offset: int = 0) -> List[Case]:
         result = await self.session.execute(
             select(CaseModel)
+            .where(CaseModel.org_id == self.org_id)
             .order_by(CaseModel.created_at.desc())
             .limit(limit)
             .offset(offset)
@@ -82,30 +100,46 @@ class CaseRepository:
 
     async def get_by_status(self, status: str) -> List[Case]:
         result = await self.session.execute(
-            select(CaseModel).where(CaseModel.status == status)
+            select(CaseModel).where(
+                CaseModel.status == status,
+                CaseModel.org_id == self.org_id,
+            )
         )
         return [self._to_entity(m) for m in result.scalars().all()]
 
     async def get_by_owner(self, owner_id: UUID) -> List[Case]:
         result = await self.session.execute(
-            select(CaseModel).where(CaseModel.owner_id == owner_id)
+            select(CaseModel).where(
+                CaseModel.owner_id == owner_id,
+                CaseModel.org_id == self.org_id,
+            )
         )
         return [self._to_entity(m) for m in result.scalars().all()]
 
     async def get_open_cases(self) -> List[Case]:
         result = await self.session.execute(
-            select(CaseModel).where(CaseModel.status.notin_(["resolved", "closed"]))
+            select(CaseModel).where(
+                CaseModel.status.notin_(["resolved", "closed"]),
+                CaseModel.org_id == self.org_id,
+            )
         )
         return [self._to_entity(m) for m in result.scalars().all()]
 
     async def delete(self, case_id: UUID) -> None:
         result = await self.session.execute(
-            select(CaseModel).where(CaseModel.id == case_id)
+            select(CaseModel).where(
+                CaseModel.id == case_id,
+                CaseModel.org_id == self.org_id,
+            )
         )
         model = result.scalar_one_or_none()
         if model:
-            await self.session.delete(model)
-            await self.session.commit()
+            try:
+                await self.session.delete(model)
+                await self.session.commit()
+            except Exception:
+                await self.session.rollback()
+                raise
 
     def _to_entity(self, model: CaseModel) -> Case:
         return Case(

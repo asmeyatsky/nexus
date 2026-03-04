@@ -44,16 +44,33 @@ class DAGOrchestrator:
         completed: Set[str] = set()
         pending = set(self._nodes.keys())
 
+        failed: Set[str] = set()
+
         while pending:
-            # Find nodes whose dependencies are all satisfied
+            # Find nodes whose dependencies are all satisfied and none failed
             ready = [
                 name
                 for name in pending
                 if self._nodes[name].depends_on.issubset(completed)
+                and not self._nodes[name].depends_on.intersection(failed)
             ]
 
-            if not ready:
+            # Skip nodes whose dependencies have failed
+            blocked_by_failure = [
+                name
+                for name in pending
+                if self._nodes[name].depends_on.intersection(failed)
+            ]
+            for name in blocked_by_failure:
+                results[name] = {"error": "Skipped due to upstream failure"}
+                failed.add(name)
+                pending.discard(name)
+
+            if not ready and pending:
                 raise RuntimeError(f"Circular dependency detected. Pending: {pending}")
+
+            if not ready:
+                break
 
             # Execute ready nodes in parallel
             tasks = [self._execute_node(name, context, results) for name in ready]
@@ -62,6 +79,7 @@ class DAGOrchestrator:
             for name, result in zip(ready, node_results):
                 if isinstance(result, Exception):
                     results[name] = {"error": str(result)}
+                    failed.add(name)
                 else:
                     results[name] = result
                 completed.add(name)

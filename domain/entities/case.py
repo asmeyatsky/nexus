@@ -154,6 +154,10 @@ class Case:
         )
 
     def resolve(self, resolution_notes: str, resolved_by: str) -> "Case":
+        if CaseStatus.RESOLVED not in VALID_STATUS_TRANSITIONS.get(self.status, set()):
+            raise ValueError(
+                f"Cannot resolve case from {self.status.value} status"
+            )
         now = datetime.now(UTC)
         return replace(
             self,
@@ -174,12 +178,26 @@ class Case:
         )
 
     def close(self) -> "Case":
+        if CaseStatus.CLOSED not in VALID_STATUS_TRANSITIONS.get(self.status, set()):
+            raise ValueError(
+                f"Cannot close case from {self.status.value} status"
+            )
         now = datetime.now(UTC)
         return replace(
             self,
             status=CaseStatus.CLOSED,
             closed_at=now,
             updated_at=now,
+            domain_events=self.domain_events
+            + (
+                CaseStatusChangedEvent(
+                    aggregate_id=str(self.id),
+                    occurred_at=now,
+                    old_status=self.status.value,
+                    new_status=CaseStatus.CLOSED.value,
+                    priority=self.priority.value,
+                ),
+            ),
         )
 
     def escalate(self) -> "Case":
@@ -187,8 +205,19 @@ class Case:
             CasePriority.HIGH if self.priority != CasePriority.HIGH else self.priority
         )
         now = datetime.now(UTC)
+        from domain.events import CaseEscalatedEvent
+
         return replace(
             self,
             priority=new_priority,
             updated_at=now,
+            domain_events=self.domain_events
+            + (
+                CaseEscalatedEvent(
+                    aggregate_id=str(self.id),
+                    occurred_at=now,
+                    old_priority=self.priority.value,
+                    new_priority=new_priority.value,
+                ),
+            ),
         )

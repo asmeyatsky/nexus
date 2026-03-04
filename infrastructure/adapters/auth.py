@@ -6,25 +6,37 @@ Architectural Intent:
 - Password hashing with bcrypt
 - Role-based access control
 - Password policy enforcement
-- Token revocation via Redis
+- Token revocation via Redis (in-memory fallback with max size + cleanup)
 - Password history tracking
+- Per-account failed login tracking with lockout
 """
 
 from datetime import datetime, timedelta, timezone
 from typing import Optional, List
 from uuid import uuid4
+import logging
 import re
 
-from jose import JWTError, jwt
+import jwt
+from jwt.exceptions import PyJWTError
 from passlib.context import CryptContext
 from pydantic import BaseModel, field_validator
 
 from infrastructure.config.settings import settings
 
 
+logger = logging.getLogger(__name__)
+
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 DEFAULT_ORG_ID = "00000000-0000-0000-0000-000000000000"
+
+# Token revocation store limits
+_MAX_REVOKED_TOKENS = 100_000
+
+# Account lockout settings
+_MAX_FAILED_LOGIN_ATTEMPTS = 5
+_LOCKOUT_DURATION_SECONDS = 900  # 15 minutes
 
 
 class TokenData(BaseModel):
@@ -111,7 +123,7 @@ def decode_token(token: str) -> Optional[TokenData]:
         return TokenData(
             user_id=user_id, email=email, role=role, org_id=org_id, jti=jti
         )
-    except JWTError:
+    except (PyJWTError, Exception):
         return None
 
 
@@ -120,12 +132,42 @@ def require_role(user_role: str, required_roles: list[str]) -> bool:
 
 
 class TokenRevocationStore:
-    """In-memory token revocation store. Use Redis in production."""
+    """In-memory token revocation store with max size and automatic cleanup.
 
-    def __init__(self):
+    TODO: For production, replace with a Redis-backed implementation:
+
+        class RedisTokenRevocationStore:
+            def __init__(self, redis_client):
+                self._redis = redis_client
+
+            async def revoke(self, jti: str, expires_at: float):
+                ttl = int(expires_at - time.time())
+                if ttl > 0:
+                    await self._redis.setex(f"revoked:{jti}", ttl, "1")
+
+            async def is_revoked(self, jti: str) -> bool:
+                return await self._redis.exists(f"revoked:{jti}") > 0
+
+    The in-memory store is kept as a fallback with bounded size.
+    """
+
+    def __init__(self, max_size: int = _MAX_REVOKED_TOKENS):
         self._revoked_jtis: dict[str, float] = {}
+        self._max_size = max_size
 
     async def revoke(self, jti: str, expires_at: float):
+        # Cleanup if approaching max size
+        if len(self._revoked_jtis) >= self._max_size:
+            self.cleanup_expired()
+
+        # If still at max after cleanup, remove oldest entries
+        if len(self._revoked_jtis) >= self._max_size:
+            sorted_jtis = sorted(self._revoked_jtis.items(), key=lambda x: x[1])
+            # Remove oldest 10%
+            to_remove = max(1, self._max_size // 10)
+            for jti_key, _ in sorted_jtis[:to_remove]:
+                del self._revoked_jtis[jti_key]
+
         self._revoked_jtis[jti] = expires_at
 
     async def is_revoked(self, jti: str) -> bool:
@@ -141,6 +183,70 @@ class TokenRevocationStore:
 
 
 token_revocation_store = TokenRevocationStore()
+
+
+class FailedLoginTracker:
+    """Track failed login attempts per account and enforce lockout policy.
+
+    After _MAX_FAILED_LOGIN_ATTEMPTS consecutive failures, the account is
+    locked for _LOCKOUT_DURATION_SECONDS.
+    """
+
+    def __init__(
+        self,
+        max_attempts: int = _MAX_FAILED_LOGIN_ATTEMPTS,
+        lockout_duration: int = _LOCKOUT_DURATION_SECONDS,
+    ):
+        # key: user_id or email -> {"count": int, "locked_until": float | None}
+        self._attempts: dict[str, dict] = {}
+        self._max_attempts = max_attempts
+        self._lockout_duration = lockout_duration
+
+    def is_locked(self, account_key: str) -> bool:
+        """Check if the account is currently locked out."""
+        record = self._attempts.get(account_key)
+        if not record:
+            return False
+        locked_until = record.get("locked_until")
+        if locked_until and datetime.now(timezone.utc).timestamp() < locked_until:
+            return True
+        # Lockout expired -- reset
+        if locked_until and datetime.now(timezone.utc).timestamp() >= locked_until:
+            del self._attempts[account_key]
+        return False
+
+    def record_failure(self, account_key: str):
+        """Record a failed login attempt. Locks the account if threshold is reached."""
+        if account_key not in self._attempts:
+            self._attempts[account_key] = {"count": 0, "locked_until": None}
+
+        record = self._attempts[account_key]
+        record["count"] += 1
+
+        if record["count"] >= self._max_attempts:
+            record["locked_until"] = (
+                datetime.now(timezone.utc).timestamp() + self._lockout_duration
+            )
+            logger.warning(
+                "Account %s locked for %d seconds after %d failed attempts",
+                account_key,
+                self._lockout_duration,
+                record["count"],
+            )
+
+    def record_success(self, account_key: str):
+        """Clear failed login tracking on successful login."""
+        self._attempts.pop(account_key, None)
+
+    def get_remaining_attempts(self, account_key: str) -> int:
+        """Return how many attempts remain before lockout."""
+        record = self._attempts.get(account_key)
+        if not record:
+            return self._max_attempts
+        return max(0, self._max_attempts - record["count"])
+
+
+failed_login_tracker = FailedLoginTracker()
 
 MAX_PASSWORD_HISTORY = 5
 

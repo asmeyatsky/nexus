@@ -19,6 +19,7 @@ MCP Integration:
 - Resources: account://{id}, opportunity://{id}, etc.
 """
 
+import re
 from datetime import datetime
 
 from mcp.server import Server
@@ -61,10 +62,27 @@ from infrastructure.adapters import (
 )
 
 
+_UUID_PATTERN = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.IGNORECASE
+)
+
 event_bus = InMemoryEventBusAdapter()
 notification_adapter = ConsoleNotificationAdapter()
 audit_log_adapter = ConsoleAuditLogAdapter()
 auth_adapter = MockAuthenticationAdapter()
+
+
+def _validate_auth(arguments: dict) -> None:
+    """Validate that auth_token is present and non-empty."""
+    token = arguments.get("auth_token") if isinstance(arguments, dict) else None
+    if not token:
+        raise ValueError("Missing or invalid auth_token in request arguments")
+
+
+def _validate_uuid(value: str, field_name: str = "id") -> None:
+    """Validate that a string is a valid UUID format."""
+    if not _UUID_PATTERN.match(value):
+        raise ValueError(f"Invalid UUID format for {field_name}: {value}")
 
 
 class NexusCRMMCPServer:
@@ -72,6 +90,11 @@ class NexusCRMMCPServer:
 
     def __init__(self):
         self.server = Server("nexus-crm")
+        self._account_repo = InMemoryAccountRepository()
+        self._contact_repo = InMemoryContactRepository()
+        self._opportunity_repo = InMemoryOpportunityRepository()
+        self._lead_repo = InMemoryLeadRepository()
+        self._case_repo = InMemoryCaseRepository()
         self._register_tools()
         self._register_resources()
 
@@ -88,6 +111,7 @@ class NexusCRMMCPServer:
             currency: str = "USD",
         ) -> dict:
             """Create a new account in the CRM."""
+            _validate_uuid(owner_id, "owner_id")
             dto = CreateAccountDTO(
                 name=name,
                 industry=industry,
@@ -99,7 +123,7 @@ class NexusCRMMCPServer:
                 currency=currency,
             )
             command = CreateAccountCommand(
-                repository=self._get_account_repo(),
+                repository=self._account_repo,
                 event_bus=event_bus,
                 audit_log=audit_log_adapter,
             )
@@ -120,6 +144,10 @@ class NexusCRMMCPServer:
             user_id: str = None,
         ) -> dict:
             """Update an existing account."""
+            _validate_uuid(account_id, "account_id")
+            _validate_uuid(owner_id, "owner_id")
+            if user_id:
+                _validate_uuid(user_id, "user_id")
             dto = CreateAccountDTO(
                 name=name,
                 industry=industry,
@@ -131,7 +159,7 @@ class NexusCRMMCPServer:
                 currency=currency,
             )
             command = UpdateAccountCommand(
-                repository=self._get_account_repo(),
+                repository=self._account_repo,
                 event_bus=event_bus,
                 audit_log=audit_log_adapter,
             )
@@ -150,6 +178,8 @@ class NexusCRMMCPServer:
             department: str = None,
         ) -> dict:
             """Create a new contact associated with an account."""
+            _validate_uuid(account_id, "account_id")
+            _validate_uuid(owner_id, "owner_id")
             dto = CreateContactDTO(
                 account_id=account_id,
                 first_name=first_name,
@@ -161,8 +191,8 @@ class NexusCRMMCPServer:
                 department=department,
             )
             command = CreateContactCommand(
-                repository=self._get_contact_repo(),
-                account_repository=self._get_account_repo(),
+                repository=self._contact_repo,
+                account_repository=self._account_repo,
                 event_bus=event_bus,
                 audit_log=audit_log_adapter,
             )
@@ -182,6 +212,10 @@ class NexusCRMMCPServer:
             description: str = None,
         ) -> dict:
             """Create a new sales opportunity."""
+            _validate_uuid(account_id, "account_id")
+            _validate_uuid(owner_id, "owner_id")
+            if contact_id:
+                _validate_uuid(contact_id, "contact_id")
             dto = CreateOpportunityDTO(
                 account_id=account_id,
                 name=name,
@@ -194,8 +228,8 @@ class NexusCRMMCPServer:
                 description=description,
             )
             command = CreateOpportunityCommand(
-                repository=self._get_opportunity_repo(),
-                account_repository=self._get_account_repo(),
+                repository=self._opportunity_repo,
+                account_repository=self._account_repo,
                 event_bus=event_bus,
                 audit_log=audit_log_adapter,
             )
@@ -210,8 +244,10 @@ class NexusCRMMCPServer:
             reason: str = None,
         ) -> dict:
             """Update the stage of an opportunity."""
+            _validate_uuid(opportunity_id, "opportunity_id")
+            _validate_uuid(user_id, "user_id")
             command = UpdateOpportunityStageCommand(
-                repository=self._get_opportunity_repo(),
+                repository=self._opportunity_repo,
                 event_bus=event_bus,
                 audit_log=audit_log_adapter,
             )
@@ -231,6 +267,7 @@ class NexusCRMMCPServer:
             website: str = None,
         ) -> dict:
             """Create a new marketing lead."""
+            _validate_uuid(owner_id, "owner_id")
             dto = CreateLeadDTO(
                 first_name=first_name,
                 last_name=last_name,
@@ -243,7 +280,7 @@ class NexusCRMMCPServer:
                 website=website,
             )
             command = CreateLeadCommand(
-                repository=self._get_lead_repo(),
+                repository=self._lead_repo,
                 event_bus=event_bus,
                 audit_log=audit_log_adapter,
             )
@@ -253,8 +290,10 @@ class NexusCRMMCPServer:
         @self.server.tool()
         async def qualify_lead(lead_id: str, user_id: str) -> dict:
             """Qualify a lead for conversion."""
+            _validate_uuid(lead_id, "lead_id")
+            _validate_uuid(user_id, "user_id")
             command = QualifyLeadCommand(
-                repository=self._get_lead_repo(),
+                repository=self._lead_repo,
                 event_bus=event_bus,
                 audit_log=audit_log_adapter,
             )
@@ -273,6 +312,10 @@ class NexusCRMMCPServer:
             origin: str = "web",
         ) -> dict:
             """Create a new support case."""
+            _validate_uuid(account_id, "account_id")
+            _validate_uuid(owner_id, "owner_id")
+            if contact_id:
+                _validate_uuid(contact_id, "contact_id")
             dto = CreateCaseDTO(
                 subject=subject,
                 description=description,
@@ -284,8 +327,8 @@ class NexusCRMMCPServer:
                 origin=origin,
             )
             command = CreateCaseCommand(
-                repository=self._get_case_repo(),
-                account_repository=self._get_account_repo(),
+                repository=self._case_repo,
+                account_repository=self._account_repo,
                 event_bus=event_bus,
                 audit_log=audit_log_adapter,
             )
@@ -300,8 +343,10 @@ class NexusCRMMCPServer:
             user_id: str,
         ) -> dict:
             """Resolve a support case."""
+            _validate_uuid(case_id, "case_id")
+            _validate_uuid(user_id, "user_id")
             command = ResolveCaseCommand(
-                repository=self._get_case_repo(),
+                repository=self._case_repo,
                 event_bus=event_bus,
                 audit_log=audit_log_adapter,
             )
@@ -314,7 +359,8 @@ class NexusCRMMCPServer:
         @self.server.resource("account://{account_id}")
         async def get_account(account_id: str) -> str:
             """Get account details by ID."""
-            query = GetAccountQuery(repository=self._get_account_repo())
+            _validate_uuid(account_id, "account_id")
+            query = GetAccountQuery(repository=self._account_repo)
             result = await query.execute(account_id)
             if result:
                 import json
@@ -325,7 +371,7 @@ class NexusCRMMCPServer:
         @self.server.resource("accounts")
         async def list_accounts() -> str:
             """List all accounts."""
-            query = ListAccountsQuery(repository=self._get_account_repo())
+            query = ListAccountsQuery(repository=self._account_repo)
             results = await query.execute()
             import json
 
@@ -334,7 +380,8 @@ class NexusCRMMCPServer:
         @self.server.resource("contact://{contact_id}")
         async def get_contact(contact_id: str) -> str:
             """Get contact details by ID."""
-            query = GetContactQuery(repository=self._get_contact_repo())
+            _validate_uuid(contact_id, "contact_id")
+            query = GetContactQuery(repository=self._contact_repo)
             result = await query.execute(contact_id)
             if result:
                 import json
@@ -345,7 +392,7 @@ class NexusCRMMCPServer:
         @self.server.resource("contacts")
         async def list_contacts() -> str:
             """List all contacts."""
-            query = ListContactsQuery(repository=self._get_contact_repo())
+            query = ListContactsQuery(repository=self._contact_repo)
             results = await query.execute()
             import json
 
@@ -354,7 +401,8 @@ class NexusCRMMCPServer:
         @self.server.resource("opportunity://{opportunity_id}")
         async def get_opportunity(opportunity_id: str) -> str:
             """Get opportunity details by ID."""
-            query = GetOpportunityQuery(repository=self._get_opportunity_repo())
+            _validate_uuid(opportunity_id, "opportunity_id")
+            query = GetOpportunityQuery(repository=self._opportunity_repo)
             result = await query.execute(opportunity_id)
             if result:
                 import json
@@ -365,7 +413,7 @@ class NexusCRMMCPServer:
         @self.server.resource("opportunities")
         async def list_opportunities() -> str:
             """List all opportunities."""
-            query = ListOpportunitiesQuery(repository=self._get_opportunity_repo())
+            query = ListOpportunitiesQuery(repository=self._opportunity_repo)
             results = await query.execute()
             import json
 
@@ -374,7 +422,7 @@ class NexusCRMMCPServer:
         @self.server.resource("opportunities/open")
         async def get_open_opportunities() -> str:
             """Get all open opportunities."""
-            query = GetOpenOpportunitiesQuery(repository=self._get_opportunity_repo())
+            query = GetOpenOpportunitiesQuery(repository=self._opportunity_repo)
             results = await query.execute()
             import json
 
@@ -383,7 +431,8 @@ class NexusCRMMCPServer:
         @self.server.resource("lead://{lead_id}")
         async def get_lead(lead_id: str) -> str:
             """Get lead details by ID."""
-            query = GetLeadQuery(repository=self._get_lead_repo())
+            _validate_uuid(lead_id, "lead_id")
+            query = GetLeadQuery(repository=self._lead_repo)
             result = await query.execute(lead_id)
             if result:
                 import json
@@ -394,7 +443,7 @@ class NexusCRMMCPServer:
         @self.server.resource("leads")
         async def list_leads() -> str:
             """List all leads."""
-            query = ListLeadsQuery(repository=self._get_lead_repo())
+            query = ListLeadsQuery(repository=self._lead_repo)
             results = await query.execute()
             import json
 
@@ -403,7 +452,8 @@ class NexusCRMMCPServer:
         @self.server.resource("case://{case_id}")
         async def get_case(case_id: str) -> str:
             """Get case details by ID."""
-            query = GetCaseQuery(repository=self._get_case_repo())
+            _validate_uuid(case_id, "case_id")
+            query = GetCaseQuery(repository=self._case_repo)
             result = await query.execute(case_id)
             if result:
                 import json
@@ -414,7 +464,7 @@ class NexusCRMMCPServer:
         @self.server.resource("case/number/{case_number}")
         async def get_case_by_number(case_number: str) -> str:
             """Get case details by case number."""
-            query = GetCaseByNumberQuery(repository=self._get_case_repo())
+            query = GetCaseByNumberQuery(repository=self._case_repo)
             result = await query.execute(case_number)
             if result:
                 import json
@@ -425,7 +475,7 @@ class NexusCRMMCPServer:
         @self.server.resource("cases")
         async def list_cases() -> str:
             """List all cases."""
-            query = ListCasesQuery(repository=self._get_case_repo())
+            query = ListCasesQuery(repository=self._case_repo)
             results = await query.execute()
             import json
 
@@ -434,28 +484,26 @@ class NexusCRMMCPServer:
         @self.server.resource("cases/open")
         async def get_open_cases() -> str:
             """Get all open cases."""
-            query = GetOpenCasesQuery(repository=self._get_case_repo())
+            query = GetOpenCasesQuery(repository=self._case_repo)
             results = await query.execute()
             import json
 
             return json.dumps([r.__dict__ for r in results])
 
     def _get_account_repo(self):
-
-        return InMemoryAccountRepository()
+        return self._account_repo
 
     def _get_contact_repo(self):
-
-        return InMemoryContactRepository()
+        return self._contact_repo
 
     def _get_opportunity_repo(self):
-        return InMemoryOpportunityRepository()
+        return self._opportunity_repo
 
     def _get_lead_repo(self):
-        return InMemoryLeadRepository()
+        return self._lead_repo
 
     def _get_case_repo(self):
-        return InMemoryCaseRepository()
+        return self._case_repo
 
 
 class InMemoryAccountRepository:

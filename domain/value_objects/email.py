@@ -19,6 +19,7 @@ class Email:
     address: str
 
     def __post_init__(self):
+        object.__setattr__(self, "address", self.address.lower())
         if not EMAIL_PATTERN.match(self.address):
             raise ValueError(f"Invalid email address: {self.address}")
 

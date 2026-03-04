@@ -2,6 +2,7 @@
 Lead Repository Implementation
 
 Implements LeadRepositoryPort with SQLAlchemy.
+Enforces tenant isolation via org_id filtering.
 """
 
 from typing import Optional, List, Any
@@ -15,17 +16,20 @@ from infrastructure.database import LeadModel
 
 
 def _get_column_value(model: Any, attr: str, default: Any = None) -> Any:
+    """Extract value from SQLAlchemy model column at runtime."""
     value = getattr(model, attr, default)
     return value if value is not None else default
 
 
 class LeadRepository:
-    def __init__(self, session: AsyncSession):
+    def __init__(self, session: AsyncSession, org_id: str):
         self.session = session
+        self.org_id = org_id
 
     async def save(self, lead: Lead) -> Lead:
         model = LeadModel(
             id=lead.id,
+            org_id=self.org_id,
             first_name=lead.first_name,
             last_name=lead.last_name,
             email=str(lead.email),
@@ -44,14 +48,21 @@ class LeadRepository:
             created_at=lead.created_at,
             updated_at=lead.updated_at,
         )
-        merged = await self.session.merge(model)
-        await self.session.commit()
-        await self.session.refresh(merged)
+        try:
+            merged = await self.session.merge(model)
+            await self.session.commit()
+            await self.session.refresh(merged)
+        except Exception:
+            await self.session.rollback()
+            raise
         return lead
 
     async def get_by_id(self, lead_id: UUID) -> Optional[Lead]:
         result = await self.session.execute(
-            select(LeadModel).where(LeadModel.id == lead_id)
+            select(LeadModel).where(
+                LeadModel.id == lead_id,
+                LeadModel.org_id == self.org_id,
+            )
         )
         model = result.scalar_one_or_none()
         if not model:
@@ -60,7 +71,10 @@ class LeadRepository:
 
     async def get_by_email(self, email: str) -> Optional[Lead]:
         result = await self.session.execute(
-            select(LeadModel).where(LeadModel.email == email)
+            select(LeadModel).where(
+                LeadModel.email == email,
+                LeadModel.org_id == self.org_id,
+            )
         )
         model = result.scalar_one_or_none()
         if not model:
@@ -70,6 +84,7 @@ class LeadRepository:
     async def get_all(self, limit: int = 100, offset: int = 0) -> List[Lead]:
         result = await self.session.execute(
             select(LeadModel)
+            .where(LeadModel.org_id == self.org_id)
             .order_by(LeadModel.created_at.desc())
             .limit(limit)
             .offset(offset)
@@ -78,32 +93,46 @@ class LeadRepository:
 
     async def get_by_status(self, status: str) -> List[Lead]:
         result = await self.session.execute(
-            select(LeadModel).where(LeadModel.status == status)
+            select(LeadModel).where(
+                LeadModel.status == status,
+                LeadModel.org_id == self.org_id,
+            )
         )
         return [self._to_entity(m) for m in result.scalars().all()]
 
     async def get_by_owner(self, owner_id: UUID) -> List[Lead]:
         result = await self.session.execute(
-            select(LeadModel).where(LeadModel.owner_id == owner_id)
+            select(LeadModel).where(
+                LeadModel.owner_id == owner_id,
+                LeadModel.org_id == self.org_id,
+            )
         )
         return [self._to_entity(m) for m in result.scalars().all()]
 
     async def get_unqualified_leads(self) -> List[Lead]:
         result = await self.session.execute(
             select(LeadModel).where(
-                LeadModel.status.notin_(["converted", "unqualified"])
+                LeadModel.status.notin_(["converted", "unqualified"]),
+                LeadModel.org_id == self.org_id,
             )
         )
         return [self._to_entity(m) for m in result.scalars().all()]
 
     async def delete(self, lead_id: UUID) -> None:
         result = await self.session.execute(
-            select(LeadModel).where(LeadModel.id == lead_id)
+            select(LeadModel).where(
+                LeadModel.id == lead_id,
+                LeadModel.org_id == self.org_id,
+            )
         )
         model = result.scalar_one_or_none()
         if model:
-            await self.session.delete(model)
-            await self.session.commit()
+            try:
+                await self.session.delete(model)
+                await self.session.commit()
+            except Exception:
+                await self.session.rollback()
+                raise
 
     def _to_entity(self, model: LeadModel) -> Lead:
         phone_val = _get_column_value(model, "phone")

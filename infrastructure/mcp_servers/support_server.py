@@ -17,6 +17,7 @@ See also: nexus_crm_server.py for the unified facade server.
 """
 
 import json
+import re
 
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
@@ -42,8 +43,25 @@ from infrastructure.mcp_servers.nexus_crm_server import (
 )
 
 
+_UUID_PATTERN = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.IGNORECASE
+)
+
 event_bus = InMemoryEventBusAdapter()
 audit_log_adapter = ConsoleAuditLogAdapter()
+
+
+def _validate_auth(arguments: dict) -> None:
+    """Validate that auth_token is present and non-empty."""
+    token = arguments.get("auth_token") if isinstance(arguments, dict) else None
+    if not token:
+        raise ValueError("Missing or invalid auth_token in request arguments")
+
+
+def _validate_uuid(value: str, field_name: str = "id") -> None:
+    """Validate that a string is a valid UUID format."""
+    if not _UUID_PATTERN.match(value):
+        raise ValueError(f"Invalid UUID format for {field_name}: {value}")
 
 
 class SupportMCPServer:
@@ -71,6 +89,10 @@ class SupportMCPServer:
             origin: str = "web",
         ) -> dict:
             """Create a new support case."""
+            _validate_uuid(account_id, "account_id")
+            _validate_uuid(owner_id, "owner_id")
+            if contact_id:
+                _validate_uuid(contact_id, "contact_id")
             dto = CreateCaseDTO(
                 subject=subject,
                 description=description,
@@ -98,6 +120,8 @@ class SupportMCPServer:
             reason: str = None,
         ) -> dict:
             """Update the status of an existing support case."""
+            _validate_uuid(case_id, "case_id")
+            _validate_uuid(user_id, "user_id")
             command = UpdateCaseStatusCommand(
                 repository=self._case_repo,
                 event_bus=event_bus,
@@ -114,6 +138,8 @@ class SupportMCPServer:
             user_id: str,
         ) -> dict:
             """Resolve a support case with resolution notes."""
+            _validate_uuid(case_id, "case_id")
+            _validate_uuid(user_id, "user_id")
             command = ResolveCaseCommand(
                 repository=self._case_repo,
                 event_bus=event_bus,
@@ -132,6 +158,8 @@ class SupportMCPServer:
             feedback: str = None,
         ) -> dict:
             """Close a resolved case, optionally with CSAT feedback."""
+            _validate_uuid(case_id, "case_id")
+            _validate_uuid(user_id, "user_id")
             command = CloseCaseCommand(
                 repository=self._case_repo,
                 event_bus=event_bus,
@@ -148,6 +176,7 @@ class SupportMCPServer:
         @self.server.resource("case://{case_id}")
         async def get_case(case_id: str) -> str:
             """Get case details by ID."""
+            _validate_uuid(case_id, "case_id")
             query = GetCaseQuery(repository=self._case_repo)
             result = await query.execute(case_id)
             if result:

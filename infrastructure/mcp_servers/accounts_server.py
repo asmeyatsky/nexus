@@ -19,6 +19,7 @@ See also: nexus_crm_server.py for the unified facade server.
 """
 
 import json
+import re
 
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
@@ -48,8 +49,25 @@ from infrastructure.mcp_servers.nexus_crm_server import (
 )
 
 
+_UUID_PATTERN = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.IGNORECASE
+)
+
 event_bus = InMemoryEventBusAdapter()
 audit_log_adapter = ConsoleAuditLogAdapter()
+
+
+def _validate_auth(arguments: dict) -> None:
+    """Validate that auth_token is present and non-empty."""
+    token = arguments.get("auth_token") if isinstance(arguments, dict) else None
+    if not token:
+        raise ValueError("Missing or invalid auth_token in request arguments")
+
+
+def _validate_uuid(value: str, field_name: str = "id") -> None:
+    """Validate that a string is a valid UUID format."""
+    if not _UUID_PATTERN.match(value):
+        raise ValueError(f"Invalid UUID format for {field_name}: {value}")
 
 
 class AccountsMCPServer:
@@ -77,6 +95,7 @@ class AccountsMCPServer:
             currency: str = "USD",
         ) -> dict:
             """Create a new account in the CRM."""
+            _validate_uuid(owner_id, "owner_id")
             dto = CreateAccountDTO(
                 name=name,
                 industry=industry,
@@ -109,6 +128,10 @@ class AccountsMCPServer:
             user_id: str = None,
         ) -> dict:
             """Update an existing account."""
+            _validate_uuid(account_id, "account_id")
+            _validate_uuid(owner_id, "owner_id")
+            if user_id:
+                _validate_uuid(user_id, "user_id")
             dto = CreateAccountDTO(
                 name=name,
                 industry=industry,
@@ -134,6 +157,8 @@ class AccountsMCPServer:
             reason: str = None,
         ) -> dict:
             """Deactivate an account."""
+            _validate_uuid(account_id, "account_id")
+            _validate_uuid(user_id, "user_id")
             command = DeactivateAccountCommand(
                 repository=self._account_repo,
                 event_bus=event_bus,
@@ -154,6 +179,8 @@ class AccountsMCPServer:
             department: str = None,
         ) -> dict:
             """Create a new contact associated with an account."""
+            _validate_uuid(account_id, "account_id")
+            _validate_uuid(owner_id, "owner_id")
             dto = CreateContactDTO(
                 account_id=account_id,
                 first_name=first_name,
@@ -185,6 +212,8 @@ class AccountsMCPServer:
             department: str = None,
         ) -> dict:
             """Update an existing contact."""
+            _validate_uuid(contact_id, "contact_id")
+            _validate_uuid(user_id, "user_id")
             command = UpdateContactCommand(
                 repository=self._contact_repo,
                 event_bus=event_bus,
@@ -208,6 +237,7 @@ class AccountsMCPServer:
         @self.server.resource("account://{account_id}")
         async def get_account(account_id: str) -> str:
             """Get account details by ID."""
+            _validate_uuid(account_id, "account_id")
             query = GetAccountQuery(repository=self._account_repo)
             result = await query.execute(account_id)
             if result:
@@ -224,6 +254,7 @@ class AccountsMCPServer:
         @self.server.resource("accounts/owner/{owner_id}")
         async def get_accounts_by_owner(owner_id: str) -> str:
             """Get all accounts owned by a specific user."""
+            _validate_uuid(owner_id, "owner_id")
             query = GetAccountsByOwnerQuery(repository=self._account_repo)
             results = await query.execute(owner_id)
             return json.dumps([r.__dict__ for r in results])
@@ -231,6 +262,7 @@ class AccountsMCPServer:
         @self.server.resource("contact://{contact_id}")
         async def get_contact(contact_id: str) -> str:
             """Get contact details by ID."""
+            _validate_uuid(contact_id, "contact_id")
             query = GetContactQuery(repository=self._contact_repo)
             result = await query.execute(contact_id)
             if result:
@@ -247,6 +279,7 @@ class AccountsMCPServer:
         @self.server.resource("contacts/account/{account_id}")
         async def get_contacts_by_account(account_id: str) -> str:
             """Get all contacts for a specific account."""
+            _validate_uuid(account_id, "account_id")
             query = GetContactsByAccountQuery(repository=self._contact_repo)
             results = await query.execute(account_id)
             return json.dumps([r.__dict__ for r in results])

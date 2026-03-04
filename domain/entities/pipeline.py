@@ -19,12 +19,16 @@ class PipelineStage:
     is_closed: bool = False
     is_won: bool = False
 
+    def __post_init__(self):
+        if self.is_won and not self.is_closed:
+            raise ValueError("A won stage must also be closed (is_won=True requires is_closed=True)")
+
 
 @dataclass(frozen=True)
 class Pipeline:
     id: str
     name: str
-    stages: tuple
+    stages: tuple[PipelineStage, ...]
     is_default: bool
     is_active: bool
     org_id: str

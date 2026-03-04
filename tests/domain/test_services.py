@@ -7,6 +7,7 @@ from domain.services import (
     LeadScoringService,
     ForecastingService,
 )
+from domain.value_objects import Money
 
 
 # ---------- PricingService ----------
@@ -160,13 +161,13 @@ class TestForecastingService:
     def test_weighted_pipeline(self):
         @dataclass
         class FakeOpp:
-            weighted_value: float
+            weighted_value: Money
             is_closed: bool
 
         opps = [
-            FakeOpp(1000.0, False),
-            FakeOpp(2000.0, False),
-            FakeOpp(500.0, True),  # closed, excluded
+            FakeOpp(Money.from_float(1000.0, "USD"), False),
+            FakeOpp(Money.from_float(2000.0, "USD"), False),
+            FakeOpp(Money.from_float(500.0, "USD"), True),  # closed, excluded
         ]
         assert self.svc.calculate_weighted_pipeline(opps) == 3000.0
 
@@ -174,15 +175,15 @@ class TestForecastingService:
         @dataclass
         class FakeOpp:
             stage: str
-            amount: float
-            weighted_value: float
+            amount: Money
+            weighted_value: Money
             is_closed: bool
 
         opps = [
-            FakeOpp("prospecting", 1000.0, 100.0, False),
-            FakeOpp("prospecting", 2000.0, 200.0, False),
-            FakeOpp("negotiation", 5000.0, 4000.0, False),
-            FakeOpp("closed_won", 3000.0, 3000.0, True),
+            FakeOpp("prospecting", Money.from_float(1000.0, "USD"), Money.from_float(100.0, "USD"), False),
+            FakeOpp("prospecting", Money.from_float(2000.0, "USD"), Money.from_float(200.0, "USD"), False),
+            FakeOpp("negotiation", Money.from_float(5000.0, "USD"), Money.from_float(4000.0, "USD"), False),
+            FakeOpp("closed_won", Money.from_float(3000.0, "USD"), Money.from_float(3000.0, "USD"), True),
         ]
         result = self.svc.forecast_by_stage(opps)
         assert result["prospecting"]["count"] == 2

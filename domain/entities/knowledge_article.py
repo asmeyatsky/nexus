@@ -55,6 +55,8 @@ class KnowledgeArticle:
         )
 
     def publish(self) -> "KnowledgeArticle":
+        if self.status == ArticleStatus.PUBLISHED:
+            raise ValueError("Article is already published")
         return KnowledgeArticle(
             id=self.id,
             title=self.title,

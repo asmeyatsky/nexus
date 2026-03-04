@@ -34,7 +34,7 @@ class CustomFieldDefinition:
     org_id: str
     is_required: bool = False
     default_value: Optional[str] = None
-    picklist_values: tuple = ()
+    picklist_values: tuple[str, ...] = ()
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     @staticmethod
@@ -47,7 +47,7 @@ class CustomFieldDefinition:
         org_id: str,
         is_required: bool = False,
         default_value: Optional[str] = None,
-        picklist_values: tuple = (),
+        picklist_values: tuple[str, ...] = (),
     ) -> "CustomFieldDefinition":
         return CustomFieldDefinition(
             id=id,

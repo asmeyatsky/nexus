@@ -267,7 +267,13 @@ class RBACService:
         if not user:
             return False
 
-        if Permission(f"{record_type}s:delete") in self.get_user_permissions(user_id):
+        try:
+            delete_perm = Permission(f"{record_type}s:delete")
+        except ValueError:
+            # Invalid record_type that does not map to a known Permission -- deny access
+            return False
+
+        if delete_perm in self.get_user_permissions(user_id):
             return True
 
         record_key = f"{record_type}:{record_id}"

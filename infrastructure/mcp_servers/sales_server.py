@@ -18,6 +18,7 @@ See also: nexus_crm_server.py for the unified facade server.
 """
 
 import json
+import re
 from datetime import datetime
 
 from mcp.server import Server
@@ -43,8 +44,25 @@ from infrastructure.mcp_servers.nexus_crm_server import (
 )
 
 
+_UUID_PATTERN = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.IGNORECASE
+)
+
 event_bus = InMemoryEventBusAdapter()
 audit_log_adapter = ConsoleAuditLogAdapter()
+
+
+def _validate_auth(arguments: dict) -> None:
+    """Validate that auth_token is present and non-empty."""
+    token = arguments.get("auth_token") if isinstance(arguments, dict) else None
+    if not token:
+        raise ValueError("Missing or invalid auth_token in request arguments")
+
+
+def _validate_uuid(value: str, field_name: str = "id") -> None:
+    """Validate that a string is a valid UUID format."""
+    if not _UUID_PATTERN.match(value):
+        raise ValueError(f"Invalid UUID format for {field_name}: {value}")
 
 
 class SalesMCPServer:
@@ -73,6 +91,10 @@ class SalesMCPServer:
             description: str = None,
         ) -> dict:
             """Create a new sales opportunity."""
+            _validate_uuid(account_id, "account_id")
+            _validate_uuid(owner_id, "owner_id")
+            if contact_id:
+                _validate_uuid(contact_id, "contact_id")
             dto = CreateOpportunityDTO(
                 account_id=account_id,
                 name=name,
@@ -101,6 +123,8 @@ class SalesMCPServer:
             reason: str = None,
         ) -> dict:
             """Update the stage of an opportunity in the pipeline."""
+            _validate_uuid(opportunity_id, "opportunity_id")
+            _validate_uuid(user_id, "user_id")
             command = UpdateOpportunityStageCommand(
                 repository=self._opportunity_repo,
                 event_bus=event_bus,
@@ -119,6 +143,8 @@ class SalesMCPServer:
             description: str = None,
         ) -> dict:
             """Update general fields on an existing opportunity."""
+            _validate_uuid(opportunity_id, "opportunity_id")
+            _validate_uuid(user_id, "user_id")
             command = UpdateOpportunityCommand(
                 repository=self._opportunity_repo,
                 event_bus=event_bus,
@@ -143,6 +169,7 @@ class SalesMCPServer:
         @self.server.resource("opportunity://{opportunity_id}")
         async def get_opportunity(opportunity_id: str) -> str:
             """Get opportunity details by ID."""
+            _validate_uuid(opportunity_id, "opportunity_id")
             query = GetOpportunityQuery(repository=self._opportunity_repo)
             result = await query.execute(opportunity_id)
             if result:
@@ -166,6 +193,7 @@ class SalesMCPServer:
         @self.server.resource("opportunities/account/{account_id}")
         async def get_opportunities_by_account(account_id: str) -> str:
             """Get all opportunities for a specific account."""
+            _validate_uuid(account_id, "account_id")
             query = GetOpportunitiesByAccountQuery(
                 repository=self._opportunity_repo,
             )

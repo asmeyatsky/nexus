@@ -5,6 +5,8 @@ Architectural Intent:
 - Immutable audit logs for compliance (SOC 2, GDPR)
 - Cloud Audit Logs integration
 - Log retention policies
+- Hash chain integrity (each entry includes previous entry's checksum)
+- Sensitive field scrubbing
 """
 
 from typing import Optional, Dict, Any, List
@@ -14,7 +16,51 @@ from uuid import UUID, uuid4
 from enum import Enum
 import json
 import hashlib
+import logging
 import threading
+
+
+logger = logging.getLogger(__name__)
+
+# Field names whose values should be scrubbed from audit records
+SENSITIVE_FIELD_NAMES = frozenset({
+    "password",
+    "password_hash",
+    "hashed_password",
+    "secret",
+    "secret_key",
+    "api_key",
+    "api_secret",
+    "access_token",
+    "refresh_token",
+    "token",
+    "ssn",
+    "social_security_number",
+    "credit_card",
+    "credit_card_number",
+    "card_number",
+    "cvv",
+    "pin",
+    "private_key",
+    "client_secret",
+})
+
+_REDACTED = "[REDACTED]"
+
+
+def _scrub_sensitive_fields(data: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """Remove sensitive field values from a dict, replacing them with a redaction marker."""
+    if data is None:
+        return None
+    scrubbed = {}
+    for key, value in data.items():
+        if key.lower() in SENSITIVE_FIELD_NAMES:
+            scrubbed[key] = _REDACTED
+        elif isinstance(value, dict):
+            scrubbed[key] = _scrub_sensitive_fields(value)
+        else:
+            scrubbed[key] = value
+    return scrubbed
 
 
 class AuditAction(Enum):
@@ -65,14 +111,20 @@ class AuditLog:
     error_message: Optional[str]
     metadata: Dict[str, Any] = field(default_factory=dict)
     checksum: str = ""
+    previous_checksum: str = ""
 
     def __post_init__(self):
         if not self.checksum:
             self.checksum = self._calculate_checksum()
 
     def _calculate_checksum(self) -> str:
-        data = f"{self.timestamp}{self.action.value}{self.user_id}{self.resource_type.value}{self.resource_id}"
-        return hashlib.sha256(data.encode()).hexdigest()[:16]
+        """Full SHA-256 hash chain: includes entry data AND previous entry's checksum."""
+        data = (
+            f"{self.timestamp}{self.action.value}{self.user_id}"
+            f"{self.resource_type.value}{self.resource_id}"
+            f"{self.previous_checksum}"
+        )
+        return hashlib.sha256(data.encode()).hexdigest()
 
 
 def _hash_pii(value: Optional[str]) -> Optional[str]:
@@ -90,6 +142,7 @@ class AuditLogService:
         self._lock = threading.Lock()
         self.project_id = project_id
         self._callbacks: List[callable] = []
+        self._last_checksum: str = ""
 
     def log(
         self,
@@ -109,34 +162,41 @@ class AuditLogService:
         error_message: str = None,
         metadata: Dict[str, Any] = None,
     ) -> AuditLog:
-        log_entry = AuditLog(
-            id=uuid4(),
-            timestamp=datetime.now(),
-            action=action,
-            resource_type=resource_type,
-            resource_id=resource_id,
-            user_id=user_id,
-            user_email=_hash_pii(user_email),
-            org_id=org_id,
-            ip_address=_hash_pii(ip_address),
-            user_agent=user_agent,
-            request_id=request_id,
-            changes=changes,
-            old_values=old_values,
-            new_values=new_values,
-            success=success,
-            error_message=error_message,
-            metadata=metadata or {},
-        )
+        # Scrub sensitive fields from change dicts
+        scrubbed_changes = _scrub_sensitive_fields(changes)
+        scrubbed_old_values = _scrub_sensitive_fields(old_values)
+        scrubbed_new_values = _scrub_sensitive_fields(new_values)
 
         with self._lock:
+            log_entry = AuditLog(
+                id=uuid4(),
+                timestamp=datetime.now(),
+                action=action,
+                resource_type=resource_type,
+                resource_id=resource_id,
+                user_id=user_id,
+                user_email=_hash_pii(user_email),
+                org_id=org_id,
+                ip_address=_hash_pii(ip_address),
+                user_agent=user_agent,
+                request_id=request_id,
+                changes=scrubbed_changes,
+                old_values=scrubbed_old_values,
+                new_values=scrubbed_new_values,
+                success=success,
+                error_message=error_message,
+                metadata=metadata or {},
+                previous_checksum=self._last_checksum,
+            )
+
+            self._last_checksum = log_entry.checksum
             self._logs.append(log_entry)
 
             for callback in self._callbacks:
                 try:
                     callback(log_entry)
-                except Exception as e:
-                    print(f"Audit callback error: {e}")
+                except Exception:
+                    logger.exception("Audit callback error")
 
         self._publish_to_cloud_log(log_entry)
 
@@ -151,9 +211,9 @@ class AuditLogService:
             import google.cloud.logging
 
             client = google.cloud.logging.Client()
-            logger = client.logger("audit_logs")
+            gcp_logger = client.logger("audit_logs")
 
-            logger.info(
+            gcp_logger.info(
                 json.dumps(
                     {
                         "audit": {
@@ -177,8 +237,8 @@ class AuditLogService:
                     },
                 },
             )
-        except Exception as e:
-            print(f"Cloud logging error: {e}")
+        except Exception:
+            logger.exception("Cloud logging error")
 
     def register_callback(self, callback: callable):
         """Register callback for async processing."""
@@ -256,19 +316,38 @@ class AuditLogService:
                     "success": entry.success,
                     "changes": entry.changes,
                     "checksum": entry.checksum,
+                    "previous_checksum": entry.previous_checksum,
                 }
                 for entry in logs
             ]
 
         return logs
 
-    def verify_integrity(self, log_id: UUID) -> bool:
+    def verify_integrity(self, log_id: UUID = None) -> bool:
+        """Verify the integrity of the audit log chain.
+
+        If log_id is provided, verify only that single entry's checksum.
+        If log_id is None, verify the entire chain from start to finish.
+        """
         with self._lock:
+            if log_id is not None:
+                for log in self._logs:
+                    if log.id == log_id:
+                        expected = log._calculate_checksum()
+                        return log.checksum == expected
+                return False
+
+            # Verify entire chain
+            prev_checksum = ""
             for log in self._logs:
-                if log.id == log_id:
-                    expected = log._calculate_checksum()
-                    return log.checksum == expected
-        return False
+                if log.previous_checksum != prev_checksum:
+                    return False
+                expected = log._calculate_checksum()
+                if log.checksum != expected:
+                    return False
+                prev_checksum = log.checksum
+
+            return True
 
 
 audit_service = AuditLogService()

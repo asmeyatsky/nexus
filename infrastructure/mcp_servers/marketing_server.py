@@ -17,6 +17,7 @@ See also: nexus_crm_server.py for the unified facade server.
 """
 
 import json
+import re
 
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
@@ -41,8 +42,25 @@ from infrastructure.mcp_servers.nexus_crm_server import (
 )
 
 
+_UUID_PATTERN = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.IGNORECASE
+)
+
 event_bus = InMemoryEventBusAdapter()
 audit_log_adapter = ConsoleAuditLogAdapter()
+
+
+def _validate_auth(arguments: dict) -> None:
+    """Validate that auth_token is present and non-empty."""
+    token = arguments.get("auth_token") if isinstance(arguments, dict) else None
+    if not token:
+        raise ValueError("Missing or invalid auth_token in request arguments")
+
+
+def _validate_uuid(value: str, field_name: str = "id") -> None:
+    """Validate that a string is a valid UUID format."""
+    if not _UUID_PATTERN.match(value):
+        raise ValueError(f"Invalid UUID format for {field_name}: {value}")
 
 
 class MarketingMCPServer:
@@ -73,6 +91,7 @@ class MarketingMCPServer:
             website: str = None,
         ) -> dict:
             """Create a new marketing lead."""
+            _validate_uuid(owner_id, "owner_id")
             dto = CreateLeadDTO(
                 first_name=first_name,
                 last_name=last_name,
@@ -95,6 +114,8 @@ class MarketingMCPServer:
         @self.server.tool()
         async def qualify_lead(lead_id: str, user_id: str) -> dict:
             """Qualify a lead, marking it ready for conversion."""
+            _validate_uuid(lead_id, "lead_id")
+            _validate_uuid(user_id, "user_id")
             command = QualifyLeadCommand(
                 repository=self._lead_repo,
                 event_bus=event_bus,
@@ -110,6 +131,8 @@ class MarketingMCPServer:
             account_name: str = None,
         ) -> dict:
             """Convert a qualified lead into an Account, Contact, and Opportunity."""
+            _validate_uuid(lead_id, "lead_id")
+            _validate_uuid(user_id, "user_id")
             command = ConvertLeadCommand(
                 repository=self._lead_repo,
                 account_repository=self._account_repo,
@@ -127,6 +150,7 @@ class MarketingMCPServer:
         @self.server.resource("lead://{lead_id}")
         async def get_lead(lead_id: str) -> str:
             """Get lead details by ID."""
+            _validate_uuid(lead_id, "lead_id")
             query = GetLeadQuery(repository=self._lead_repo)
             result = await query.execute(lead_id)
             if result:

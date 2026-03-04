@@ -54,6 +54,16 @@ class Settings(BaseSettings):
     sso_okta_domain: str = os.environ.get("SSO_OKTA_DOMAIN", "")
     sso_okta_api_key: str = os.environ.get("SSO_OKTA_API_KEY", "")
 
+    # SAML
+    saml_issuer: str = os.environ.get("SAML_ISSUER", "")
+    saml_acs_url: str = os.environ.get("SAML_ACS_URL", "")
+
+    # SSO redirect URI allowlist (comma-separated)
+    sso_redirect_uri_allowlist: str = os.environ.get("SSO_REDIRECT_URI_ALLOWLIST", "")
+
+    # Session limits
+    sso_max_sessions: int = int(os.environ.get("SSO_MAX_SESSIONS", "10000"))
+
     # Rate Limiting
     rate_limit_requests: int = 1000
     rate_limit_window: int = 60

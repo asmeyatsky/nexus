@@ -5,6 +5,7 @@ Architectural Intent:
 - Implements AccountRepositoryPort
 - Adapter for PostgreSQL via SQLAlchemy
 - Converts between domain entities and database models
+- Enforces tenant isolation via org_id filtering
 """
 
 from typing import Optional, List, Any
@@ -24,12 +25,14 @@ def _get_column_value(model: Any, attr: str, default: Any = None) -> Any:
 
 
 class AccountRepository:
-    def __init__(self, session: AsyncSession):
+    def __init__(self, session: AsyncSession, org_id: str):
         self.session = session
+        self.org_id = org_id
 
     async def save(self, account: Account) -> Account:
         model = AccountModel(
             id=account.id,
+            org_id=self.org_id,
             name=account.name,
             industry=account.industry.type.value,
             territory=account.territory.region,
@@ -50,14 +53,21 @@ class AccountRepository:
             updated_at=account.updated_at,
         )
 
-        self.session.add(model)
-        await self.session.commit()
-        await self.session.refresh(model)
+        try:
+            merged = await self.session.merge(model)
+            await self.session.commit()
+            await self.session.refresh(merged)
+        except Exception:
+            await self.session.rollback()
+            raise
         return account
 
     async def get_by_id(self, account_id: UUID) -> Optional[Account]:
         result = await self.session.execute(
-            select(AccountModel).where(AccountModel.id == account_id)
+            select(AccountModel).where(
+                AccountModel.id == account_id,
+                AccountModel.org_id == self.org_id,
+            )
         )
         model = result.scalar_one_or_none()
         if not model:
@@ -66,7 +76,10 @@ class AccountRepository:
 
     async def get_by_name(self, name: str) -> Optional[Account]:
         result = await self.session.execute(
-            select(AccountModel).where(AccountModel.name == name)
+            select(AccountModel).where(
+                AccountModel.name == name,
+                AccountModel.org_id == self.org_id,
+            )
         )
         model = result.scalar_one_or_none()
         if not model:
@@ -76,6 +89,7 @@ class AccountRepository:
     async def get_all(self, limit: int = 100, offset: int = 0) -> List[Account]:
         result = await self.session.execute(
             select(AccountModel)
+            .where(AccountModel.org_id == self.org_id)
             .order_by(AccountModel.created_at.desc())
             .limit(limit)
             .offset(offset)
@@ -85,26 +99,39 @@ class AccountRepository:
 
     async def get_by_owner(self, owner_id: UUID) -> List[Account]:
         result = await self.session.execute(
-            select(AccountModel).where(AccountModel.owner_id == owner_id)
+            select(AccountModel).where(
+                AccountModel.owner_id == owner_id,
+                AccountModel.org_id == self.org_id,
+            )
         )
         models = result.scalars().all()
         return [self._to_entity(m) for m in models]
 
     async def get_by_industry(self, industry: str) -> List[Account]:
         result = await self.session.execute(
-            select(AccountModel).where(AccountModel.industry == industry)
+            select(AccountModel).where(
+                AccountModel.industry == industry,
+                AccountModel.org_id == self.org_id,
+            )
         )
         models = result.scalars().all()
         return [self._to_entity(m) for m in models]
 
     async def delete(self, account_id: UUID) -> None:
         result = await self.session.execute(
-            select(AccountModel).where(AccountModel.id == account_id)
+            select(AccountModel).where(
+                AccountModel.id == account_id,
+                AccountModel.org_id == self.org_id,
+            )
         )
         model = result.scalar_one_or_none()
         if model:
-            await self.session.delete(model)
-            await self.session.commit()
+            try:
+                await self.session.delete(model)
+                await self.session.commit()
+            except Exception:
+                await self.session.rollback()
+                raise
 
     def _to_entity(self, model: AccountModel) -> Account:
         annual_revenue = None

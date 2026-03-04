@@ -232,6 +232,7 @@ class TestLead:
             owner_id=uuid4(),
         )
 
+        lead = lead.change_status(LeadStatus.QUALIFIED)
         contact_id = uuid4()
         converted = lead.convert(
             account_id=account.id,
@@ -300,6 +301,7 @@ class TestCase:
             case_number="CASE-001",
         )
 
+        case = case.change_status(CaseStatus.IN_PROGRESS)
         resolved = case.resolve(
             resolution_notes="Password reset completed",
             resolved_by="support@company.com",

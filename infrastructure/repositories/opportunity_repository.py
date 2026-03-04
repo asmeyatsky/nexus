@@ -2,6 +2,7 @@
 Opportunity Repository Implementation
 
 Implements OpportunityRepositoryPort with SQLAlchemy.
+Enforces tenant isolation via org_id filtering.
 """
 
 from typing import Optional, List, Any
@@ -16,17 +17,20 @@ from infrastructure.database import OpportunityModel
 
 
 def _get_column_value(model: Any, attr: str, default: Any = None) -> Any:
+    """Extract value from SQLAlchemy model column at runtime."""
     value = getattr(model, attr, default)
     return value if value is not None else default
 
 
 class OpportunityRepository:
-    def __init__(self, session: AsyncSession):
+    def __init__(self, session: AsyncSession, org_id: str):
         self.session = session
+        self.org_id = org_id
 
     async def save(self, opportunity: Opportunity) -> Opportunity:
         model = OpportunityModel(
             id=opportunity.id,
+            org_id=self.org_id,
             account_id=opportunity.account_id,
             name=opportunity.name,
             stage=opportunity.stage.value,
@@ -43,14 +47,21 @@ class OpportunityRepository:
             created_at=opportunity.created_at,
             updated_at=opportunity.updated_at,
         )
-        merged = await self.session.merge(model)
-        await self.session.commit()
-        await self.session.refresh(merged)
+        try:
+            merged = await self.session.merge(model)
+            await self.session.commit()
+            await self.session.refresh(merged)
+        except Exception:
+            await self.session.rollback()
+            raise
         return opportunity
 
     async def get_by_id(self, opportunity_id: UUID) -> Optional[Opportunity]:
         result = await self.session.execute(
-            select(OpportunityModel).where(OpportunityModel.id == opportunity_id)
+            select(OpportunityModel).where(
+                OpportunityModel.id == opportunity_id,
+                OpportunityModel.org_id == self.org_id,
+            )
         )
         model = result.scalar_one_or_none()
         if not model:
@@ -59,13 +70,17 @@ class OpportunityRepository:
 
     async def get_by_account(self, account_id: UUID) -> List[Opportunity]:
         result = await self.session.execute(
-            select(OpportunityModel).where(OpportunityModel.account_id == account_id)
+            select(OpportunityModel).where(
+                OpportunityModel.account_id == account_id,
+                OpportunityModel.org_id == self.org_id,
+            )
         )
         return [self._to_entity(m) for m in result.scalars().all()]
 
     async def get_all(self, limit: int = 100, offset: int = 0) -> List[Opportunity]:
         result = await self.session.execute(
             select(OpportunityModel)
+            .where(OpportunityModel.org_id == self.org_id)
             .order_by(OpportunityModel.created_at.desc())
             .limit(limit)
             .offset(offset)
@@ -74,20 +89,27 @@ class OpportunityRepository:
 
     async def get_by_owner(self, owner_id: UUID) -> List[Opportunity]:
         result = await self.session.execute(
-            select(OpportunityModel).where(OpportunityModel.owner_id == owner_id)
+            select(OpportunityModel).where(
+                OpportunityModel.owner_id == owner_id,
+                OpportunityModel.org_id == self.org_id,
+            )
         )
         return [self._to_entity(m) for m in result.scalars().all()]
 
     async def get_by_stage(self, stage: str) -> List[Opportunity]:
         result = await self.session.execute(
-            select(OpportunityModel).where(OpportunityModel.stage == stage)
+            select(OpportunityModel).where(
+                OpportunityModel.stage == stage,
+                OpportunityModel.org_id == self.org_id,
+            )
         )
         return [self._to_entity(m) for m in result.scalars().all()]
 
     async def get_open_opportunities(self) -> List[Opportunity]:
         result = await self.session.execute(
             select(OpportunityModel).where(
-                OpportunityModel.stage.notin_(["closed_won", "closed_lost"])
+                OpportunityModel.stage.notin_(["closed_won", "closed_lost"]),
+                OpportunityModel.org_id == self.org_id,
             )
         )
         return [self._to_entity(m) for m in result.scalars().all()]
@@ -97,19 +119,27 @@ class OpportunityRepository:
     ) -> List[Opportunity]:
         result = await self.session.execute(
             select(OpportunityModel).where(
-                OpportunityModel.close_date.between(start_date, end_date)
+                OpportunityModel.close_date.between(start_date, end_date),
+                OpportunityModel.org_id == self.org_id,
             )
         )
         return [self._to_entity(m) for m in result.scalars().all()]
 
     async def delete(self, opportunity_id: UUID) -> None:
         result = await self.session.execute(
-            select(OpportunityModel).where(OpportunityModel.id == opportunity_id)
+            select(OpportunityModel).where(
+                OpportunityModel.id == opportunity_id,
+                OpportunityModel.org_id == self.org_id,
+            )
         )
         model = result.scalar_one_or_none()
         if model:
-            await self.session.delete(model)
-            await self.session.commit()
+            try:
+                await self.session.delete(model)
+                await self.session.commit()
+            except Exception:
+                await self.session.rollback()
+                raise
 
     def _to_entity(self, model: OpportunityModel) -> Opportunity:
         amount = Money.from_float(

@@ -23,6 +23,10 @@ class Attachment:
     org_id: str
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
+    def __post_init__(self):
+        if self.size_bytes <= 0:
+            raise ValueError("size_bytes must be greater than 0")
+
     @staticmethod
     def create(
         id: str,

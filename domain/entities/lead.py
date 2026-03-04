@@ -158,6 +158,10 @@ class Lead:
         contact_id: UUID,
         opportunity_id: Optional[UUID] = None,
     ) -> "Lead":
+        if LeadStatus.CONVERTED not in VALID_STATUS_TRANSITIONS.get(self.status, set()):
+            raise ValueError(
+                f"Cannot convert lead from {self.status.value} status. Lead must be QUALIFIED first."
+            )
         now = datetime.now(UTC)
         return replace(
             self,
@@ -185,4 +189,13 @@ class Lead:
             self,
             rating=rating,
             updated_at=now,
+            domain_events=self.domain_events
+            + (
+                LeadStatusChangedEvent(
+                    aggregate_id=str(self.id),
+                    occurred_at=now,
+                    old_status=self.status.value,
+                    new_status=self.status.value,
+                ),
+            ),
         )

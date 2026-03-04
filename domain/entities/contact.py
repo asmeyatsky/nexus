@@ -107,6 +107,8 @@ class Contact:
         )
 
     def deactivate(self) -> "Contact":
+        if not self.is_active:
+            return self
         now = datetime.now(UTC)
         return replace(
             self,

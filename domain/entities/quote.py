@@ -8,6 +8,7 @@ Architectural Intent:
 
 from dataclasses import dataclass, field
 from datetime import datetime, UTC
+from decimal import Decimal
 from typing import Optional, List
 from enum import Enum
 
@@ -27,12 +28,14 @@ class QuoteLineItem:
     product_id: str
     product_name: str
     quantity: int
-    unit_price: float
+    unit_price: Decimal
     discount_percent: float = 0.0
 
     @property
-    def total_price(self) -> float:
-        return self.quantity * self.unit_price * (1 - self.discount_percent / 100)
+    def total_price(self) -> Decimal:
+        price = Decimal(str(self.unit_price))
+        discount = Decimal(str(self.discount_percent))
+        return price * self.quantity * (1 - discount / 100)
 
 
 @dataclass(frozen=True)
@@ -41,7 +44,7 @@ class Quote:
     opportunity_id: str
     name: str
     status: QuoteStatus
-    line_items: tuple
+    line_items: tuple[QuoteLineItem, ...]
     currency: str
     owner_id: str
     org_id: str
@@ -51,8 +54,8 @@ class Quote:
     updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     @property
-    def total_amount(self) -> float:
-        return sum(item.total_price for item in self.line_items)
+    def total_amount(self) -> Decimal:
+        return sum((item.total_price for item in self.line_items), Decimal("0"))
 
     @staticmethod
     def create(

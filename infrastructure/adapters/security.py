@@ -11,6 +11,7 @@ from typing import Dict, Optional, Set
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
+import ipaddress
 import time
 import threading
 from collections import defaultdict
@@ -30,6 +31,11 @@ RATE_LIMITS = {
     RateLimitTier.ENTERPRISE: {"requests": 100000, "window": 60},
 }
 
+# Maximum number of rate limiter buckets before triggering cleanup
+_MAX_BUCKETS = 100_000
+# Buckets idle for longer than this (seconds) are considered stale
+_STALE_BUCKET_AGE = 600  # 10 minutes
+
 
 @dataclass
 class RateLimitConfig:
@@ -44,6 +50,15 @@ class IPRule:
     rule_type: str
     description: str = ""
     expires_at: Optional[datetime] = None
+
+
+def _validate_ip_address(ip: str) -> str:
+    """Validate and normalize an IP address string.
+
+    Raises ValueError if the string is not a valid IPv4 or IPv6 address.
+    """
+    addr = ipaddress.ip_address(ip)
+    return str(addr)
 
 
 class RateLimiter:
@@ -61,6 +76,20 @@ class RateLimiter:
             window=limits["window"],
             burst=limits["requests"] * 2,
         )
+
+    def _cleanup_stale_buckets(self):
+        """Remove buckets that have been idle longer than _STALE_BUCKET_AGE.
+
+        Must be called while holding self._lock.
+        """
+        now = time.time()
+        stale_keys = [
+            key
+            for key, bucket in self._buckets.items()
+            if now - bucket.get("last_update", 0) > _STALE_BUCKET_AGE
+        ]
+        for key in stale_keys:
+            del self._buckets[key]
 
     def check_rate_limit(
         self,
@@ -80,6 +109,10 @@ class RateLimiter:
         now = time.time()
 
         with self._lock:
+            # Periodically clean up stale buckets to prevent unbounded memory growth
+            if len(self._buckets) > _MAX_BUCKETS:
+                self._cleanup_stale_buckets()
+
             if bucket_key not in self._buckets:
                 self._buckets[bucket_key] = {
                     "tokens": config.burst,
@@ -125,7 +158,7 @@ class IPSecurity:
         self._blocked_ips: Set[str] = set()
         self._rules: Dict[str, IPRule] = {}
         self._lock = threading.Lock()
-        self._enabled = False
+        self._enabled = True  # Enabled by default for security
 
     def enable(self):
         self._enabled = True
@@ -134,6 +167,7 @@ class IPSecurity:
         self._enabled = False
 
     def add_allowed_ip(self, ip: str, description: str = ""):
+        ip = _validate_ip_address(ip)
         with self._lock:
             self._allowed_ips.add(ip)
             self._rules[ip] = IPRule(ip, "allow", description)
@@ -141,6 +175,7 @@ class IPSecurity:
     def add_blocked_ip(
         self, ip: str, description: str = "", expires_at: datetime = None
     ):
+        ip = _validate_ip_address(ip)
         with self._lock:
             self._blocked_ips.add(ip)
             self._rules[ip] = IPRule(ip, "block", description, expires_at)
@@ -151,13 +186,26 @@ class IPSecurity:
             self._blocked_ips.discard(ip)
             self._rules.pop(ip, None)
 
+    def _is_block_expired(self, ip: str) -> bool:
+        """Check if a blocked IP's rule has expired."""
+        rule = self._rules.get(ip)
+        if rule and rule.expires_at and rule.expires_at <= datetime.now():
+            return True
+        return False
+
     def check_ip(self, ip: str) -> tuple[bool, str]:
         if not self._enabled:
             return True, "allowed"
 
         with self._lock:
             if ip in self._blocked_ips:
-                return False, "blocked"
+                # Check if the block has expired
+                if self._is_block_expired(ip):
+                    self._blocked_ips.discard(ip)
+                    self._rules.pop(ip, None)
+                    # Fall through to allowlist check
+                else:
+                    return False, "blocked"
 
             if self._allowed_ips and ip not in self._allowed_ips:
                 return False, "not_allowed"
@@ -204,7 +252,7 @@ class SecurityMiddleware:
             await response(scope, receive, send)
             return
 
-        # Use client IP for rate limiting — never trust spoofable headers
+        # Use client IP for rate limiting -- never trust spoofable headers
         user_id = client_ip
         org_id = "default"
 

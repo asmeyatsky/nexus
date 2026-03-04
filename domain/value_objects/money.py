@@ -53,8 +53,15 @@ class Money:
             raise ValueError("Cannot compare money with different currencies")
         return self.amount > other.amount
 
+    def __radd__(self, other):
+        if other == 0:
+            return self
+        return NotImplemented
+
     def __lt__(self, other: "Money") -> bool:
-        return not self.__gt__(other)
+        if self.currency != other.currency:
+            raise ValueError("Cannot compare money with different currencies")
+        return self.amount < other.amount
 
     def __ge__(self, other: "Money") -> bool:
         return self.__gt__(other) or self == other

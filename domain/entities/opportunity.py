@@ -25,6 +25,7 @@ from domain.events import (
     DomainEvent,
     OpportunityCreatedEvent,
     OpportunityStageChangedEvent,
+    OpportunityUpdatedEvent,
     OpportunityWonEvent,
     OpportunityLostEvent,
 )
@@ -264,12 +265,9 @@ class Opportunity:
             updated_at=now,
             domain_events=self.domain_events
             + (
-                OpportunityStageChangedEvent(
+                OpportunityUpdatedEvent(
                     aggregate_id=str(self.id),
                     occurred_at=now,
-                    old_stage=self.stage.value,
-                    new_stage=self.stage.value,
-                    amount=self.amount.amount_float,
                 ),
             ),
         )

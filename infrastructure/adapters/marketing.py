@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from uuid import uuid4
 from enum import Enum
-import httpx
+import asyncio
 
 
 class CampaignStatus(Enum):
@@ -75,6 +75,19 @@ class MarketingAutomationService:
     def configure_provider(self, provider: EmailProvider, config: Dict):
         self._provider_config[provider] = config
 
+    async def _retry_with_backoff(self, coro_func, *args, max_retries: int = 3, **kwargs):
+        """Retry an async operation with exponential backoff."""
+        last_exception = None
+        for attempt in range(max_retries):
+            try:
+                return await coro_func(*args, **kwargs)
+            except Exception as e:
+                last_exception = e
+                if attempt < max_retries - 1:
+                    wait_time = (2 ** attempt) * 0.5
+                    await asyncio.sleep(wait_time)
+        raise last_exception
+
     async def send_via_sendgrid(
         self,
         to: List[str],
@@ -102,6 +115,8 @@ class MarketingAutomationService:
                 "html": html,
             }
         ]
+
+        import httpx
 
         async with httpx.AsyncClient() as client:
             try:
@@ -137,6 +152,8 @@ class MarketingAutomationService:
             "recipients": {"list_id": list_id},
             "settings": {"subject_line": subject, "reply_to": "noreply@company.com"},
         }
+
+        import httpx
 
         async with httpx.AsyncClient() as client:
             try:

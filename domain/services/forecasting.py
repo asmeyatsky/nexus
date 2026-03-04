@@ -8,7 +8,10 @@ class ForecastingService:
     """Revenue forecasting based on pipeline data."""
 
     def calculate_weighted_pipeline(self, opportunities: List[Opportunity]) -> float:
-        return sum(opp.weighted_value for opp in opportunities if not opp.is_closed)
+        return sum(
+            (opp.weighted_value.amount_float for opp in opportunities if not opp.is_closed),
+            0.0,
+        )
 
     def forecast_by_stage(
         self, opportunities: List[Opportunity]
@@ -21,6 +24,6 @@ class ForecastingService:
             if stage not in stages:
                 stages[stage] = {"count": 0, "total": 0.0, "weighted": 0.0}
             stages[stage]["count"] += 1
-            stages[stage]["total"] += opp.amount
-            stages[stage]["weighted"] += opp.weighted_value
+            stages[stage]["total"] += opp.amount.amount_float
+            stages[stage]["weighted"] += opp.weighted_value.amount_float
         return stages

@@ -14,7 +14,6 @@ from uuid import uuid4
 from enum import Enum
 import asyncio
 import json
-import threading
 
 
 class TaskStatus(Enum):
@@ -57,7 +56,7 @@ class MessageQueue:
         self._tasks: Dict[str, Task] = {}
         self._handlers: Dict[str, Callable] = {}
         self._queue: List[Task] = []
-        self._lock = threading.Lock()
+        self._lock = asyncio.Lock()
         self._processing = False
 
     def register_handler(self, task_type: str, handler: Callable):
@@ -83,7 +82,7 @@ class MessageQueue:
             max_attempts=max_attempts,
         )
 
-        with self._lock:
+        async with self._lock:
             self._tasks[task.id] = task
             self._queue.append(task)
             self._queue.sort(key=lambda t: t.priority.value, reverse=True)
@@ -133,7 +132,7 @@ class MessageQueue:
                 await self.process(task.id)
 
         while True:
-            with self._lock:
+            async with self._lock:
                 pending = [t for t in self._queue if t.status == TaskStatus.PENDING]
 
             if not pending:

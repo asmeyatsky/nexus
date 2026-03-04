@@ -124,8 +124,13 @@ class CaseResolvedEvent(DomainEvent):
 
 @dataclass(frozen=True)
 class CaseEscalatedEvent(DomainEvent):
-    priority: str = ""
-    reason: str = ""
+    old_priority: str = ""
+    new_priority: str = ""
+
+
+@dataclass(frozen=True)
+class OpportunityUpdatedEvent(DomainEvent):
+    pass
 
 
 # Campaign Events

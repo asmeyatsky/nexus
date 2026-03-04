@@ -8,6 +8,7 @@ Architectural Intent:
 
 from dataclasses import dataclass, field
 from datetime import datetime, UTC
+from decimal import Decimal
 
 
 @dataclass(frozen=True)
@@ -17,7 +18,7 @@ class Product:
     code: str
     description: str
     family: str
-    unit_price: float
+    unit_price: Decimal
     currency: str
     is_active: bool
     org_id: str
@@ -31,7 +32,7 @@ class Product:
         code: str,
         description: str,
         family: str,
-        unit_price: float,
+        unit_price: Decimal,
         currency: str,
         org_id: str,
     ) -> "Product":
@@ -53,7 +54,7 @@ class PriceBookEntry:
     id: str
     product_id: str
     price_book_id: str
-    unit_price: float
+    unit_price: Decimal
     currency: str
     is_active: bool = True
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))

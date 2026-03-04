@@ -20,7 +20,8 @@ def health_check():
     import httpx
 
     try:
-        response = httpx.get("http://localhost:8000/health", timeout=5)
+        health_url = os.environ.get("HEALTH_CHECK_URL", "http://localhost:8000")
+        response = httpx.get(f"{health_url}/health", timeout=5)
         if response.status_code == 200:
             print("API is healthy")
             return 0
@@ -48,11 +49,11 @@ def run_migrate(args):
     # --- Build config from CLI flags + environment variables ---
     export_dir = args.export_dir
     sf_instance_url = args.sf_instance_url or os.environ.get("SF_INSTANCE_URL")
-    sf_access_token = args.sf_access_token or os.environ.get("SF_ACCESS_TOKEN")
-    sf_client_id = args.sf_client_id or os.environ.get("SF_CLIENT_ID")
-    sf_client_secret = args.sf_client_secret or os.environ.get("SF_CLIENT_SECRET")
+    sf_access_token = os.environ.get("SF_ACCESS_TOKEN")
+    sf_client_id = os.environ.get("SF_CLIENT_ID")
+    sf_client_secret = os.environ.get("SF_CLIENT_SECRET")
     sf_username = args.sf_username or os.environ.get("SF_USERNAME")
-    sf_password = args.sf_password or os.environ.get("SF_PASSWORD")
+    sf_password = os.environ.get("SF_PASSWORD")
 
     # Validate that we have either file export or API credentials
     if not export_dir and not sf_instance_url:
@@ -231,8 +232,10 @@ def main():
     # Salesforce API connection options
     sf_group = migrate_parser.add_argument_group(
         "Salesforce API options",
-        "Credentials for live Salesforce API access. "
-        "Can also be set via environment variables (SF_INSTANCE_URL, SF_ACCESS_TOKEN, etc.).",
+        "Credentials are read from environment variables only (SF_INSTANCE_URL, "
+        "SF_ACCESS_TOKEN, SF_CLIENT_ID, SF_CLIENT_SECRET, SF_USERNAME, SF_PASSWORD) "
+        "to avoid exposing secrets in process listings. "
+        "Only --sf-instance-url and --sf-username are accepted as CLI flags.",
     )
     sf_group.add_argument(
         "--sf-instance-url",
@@ -240,21 +243,7 @@ def main():
         help="Salesforce instance URL (e.g. https://myorg.salesforce.com)",
     )
     sf_group.add_argument(
-        "--sf-access-token",
-        metavar="TOKEN",
-        help="Pre-authenticated Salesforce access token",
-    )
-    sf_group.add_argument(
-        "--sf-client-id", metavar="ID", help="Salesforce OAuth client ID"
-    )
-    sf_group.add_argument(
-        "--sf-client-secret", metavar="SECRET", help="Salesforce OAuth client secret"
-    )
-    sf_group.add_argument(
         "--sf-username", metavar="USER", help="Salesforce username (for password grant)"
-    )
-    sf_group.add_argument(
-        "--sf-password", metavar="PASS", help="Salesforce password (for password grant)"
     )
 
     args = parser.parse_args()

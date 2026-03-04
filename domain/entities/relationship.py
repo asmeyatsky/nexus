@@ -34,6 +34,10 @@ class Relationship:
     notes: str = ""
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
+    def __post_init__(self):
+        if not 1 <= self.strength <= 10:
+            raise ValueError("Relationship strength must be between 1 and 10")
+
     @staticmethod
     def create(
         id: str,
