@@ -64,7 +64,7 @@ nexus/
 ### Prerequisites
 
 - Python 3.11+
-- PostgreSQL 15+ (production) or SQLite (development)
+- PostgreSQL 16+ (production) or SQLite (development)
 - Redis 7+ (optional, for caching and token revocation)
 
 ### Installation
@@ -177,16 +177,19 @@ pytest tests/ -v
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/health` | Health check (DB, Redis, externals) |
-| GET | `/metrics` | Prometheus-style metrics (requires `audit:view`) |
+| GET | `/metrics` | Application metrics (requires `audit:view`) |
+| GET | `/metrics/prometheus` | Prometheus text exposition format |
 
 ## Testing
+
+The project has 390+ tests across domain, application, infrastructure, and integration layers.
 
 ```bash
 # Run all tests
 pytest tests/ -v
 
-# Run with coverage
-pytest tests/ --cov=domain --cov=application --cov=infrastructure --cov=presentation
+# Run with coverage (CI enforces 50% minimum)
+pytest tests/ --cov=domain --cov=application --cov=infrastructure --cov=presentation --cov-fail-under=50
 
 # Run specific suite
 pytest tests/integration/ -v
@@ -196,7 +199,15 @@ pytest tests/infrastructure/ -v
 
 ## Deployment
 
-### Docker
+### Docker Compose (recommended for local development)
+
+```bash
+docker compose up --build
+```
+
+This starts PostgreSQL 16, Redis 7, and the app with healthchecks. The API will be available at `http://localhost:8000`.
+
+### Docker (standalone)
 
 ```bash
 docker build -t nexus-crm .
@@ -210,11 +221,12 @@ docker run -p 8000:8000 \
 
 The pipeline runs on every push:
 1. **Lint** — `ruff check .` and `ruff format --check .`
-2. **Test** — `pytest` with coverage
-3. **Security Scan** — `bandit` static analysis
-4. **Build** — Docker image to GCR (when `ENABLE_DEPLOY` repo variable is `true`)
-5. **Deploy Staging** — Auto-deploy on `develop` branch
-6. **Deploy Production** — Auto-deploy on `main`/`master` branch
+2. **Typecheck** — `mypy` on domain/ and application/ (advisory, non-blocking)
+3. **Test** — `pytest` with coverage (minimum 50% enforced)
+4. **Security Scan** — `bandit` static analysis
+5. **Build** — Docker image to GCR (when `ENABLE_DEPLOY` repo variable is `true`)
+6. **Deploy Staging** — Auto-deploy on `develop` branch
+7. **Deploy Production** — Auto-deploy on `main`/`master` branch
 
 ### Required Secrets (for deployment)
 
