@@ -26,55 +26,65 @@ class Container:
     def set_db_session(self, session):
         self._db_session = session
 
-    def account_repository(self):
-        if self._use_database and self._db_session:
-            from infrastructure.repositories.account_repository import AccountRepository
+    def account_repository(self, org_id: str = None, session=None):
+        if self._use_database:
+            db_session = session or self._db_session
+            if db_session:
+                from infrastructure.repositories.account_repository import AccountRepository
 
-            return AccountRepository(self._db_session)
+                return AccountRepository(db_session)
         from infrastructure.mcp_servers.nexus_crm_server import (
             InMemoryAccountRepository,
         )
 
         return self._singleton("account_repo", InMemoryAccountRepository)
 
-    def contact_repository(self):
-        if self._use_database and self._db_session:
-            from infrastructure.repositories.contact_repository import ContactRepository
+    def contact_repository(self, org_id: str = None, session=None):
+        if self._use_database:
+            db_session = session or self._db_session
+            if db_session:
+                from infrastructure.repositories.contact_repository import ContactRepository
 
-            return ContactRepository(self._db_session)
+                return ContactRepository(db_session)
         from infrastructure.mcp_servers.nexus_crm_server import (
             InMemoryContactRepository,
         )
 
         return self._singleton("contact_repo", InMemoryContactRepository)
 
-    def opportunity_repository(self):
-        if self._use_database and self._db_session:
-            from infrastructure.repositories.opportunity_repository import (
-                OpportunityRepository,
-            )
+    def opportunity_repository(self, org_id: str = None, session=None):
+        if self._use_database:
+            db_session = session or self._db_session
+            if db_session:
+                from infrastructure.repositories.opportunity_repository import (
+                    OpportunityRepository,
+                )
 
-            return OpportunityRepository(self._db_session)
+                return OpportunityRepository(db_session)
         from infrastructure.mcp_servers.nexus_crm_server import (
             InMemoryOpportunityRepository,
         )
 
         return self._singleton("opportunity_repo", InMemoryOpportunityRepository)
 
-    def lead_repository(self):
-        if self._use_database and self._db_session:
-            from infrastructure.repositories.lead_repository import LeadRepository
+    def lead_repository(self, org_id: str = None, session=None):
+        if self._use_database:
+            db_session = session or self._db_session
+            if db_session:
+                from infrastructure.repositories.lead_repository import LeadRepository
 
-            return LeadRepository(self._db_session)
+                return LeadRepository(db_session)
         from infrastructure.mcp_servers.nexus_crm_server import InMemoryLeadRepository
 
         return self._singleton("lead_repo", InMemoryLeadRepository)
 
-    def case_repository(self):
-        if self._use_database and self._db_session:
-            from infrastructure.repositories.case_repository import CaseRepository
+    def case_repository(self, org_id: str = None, session=None):
+        if self._use_database:
+            db_session = session or self._db_session
+            if db_session:
+                from infrastructure.repositories.case_repository import CaseRepository
 
-            return CaseRepository(self._db_session)
+                return CaseRepository(db_session)
         from infrastructure.mcp_servers.nexus_crm_server import InMemoryCaseRepository
 
         return self._singleton("case_repo", InMemoryCaseRepository)

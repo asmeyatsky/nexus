@@ -16,6 +16,7 @@ from typing import Optional, List
 from uuid import uuid4
 import logging
 import re
+import time
 
 import jwt
 from jwt.exceptions import PyJWTError
@@ -182,7 +183,47 @@ class TokenRevocationStore:
             del self._revoked_jtis[jti]
 
 
-token_revocation_store = TokenRevocationStore()
+class RedisTokenRevocationStore:
+    """Redis-backed token revocation store.
+
+    Uses Redis SETEX so entries expire automatically when the token expires,
+    eliminating the need for manual cleanup.
+    """
+
+    def __init__(self, redis_client):
+        self._redis = redis_client
+
+    async def revoke(self, jti: str, expires_at: float):
+        try:
+            ttl = int(expires_at - time.time())
+            if ttl > 0:
+                await self._redis.setex(f"revoked:{jti}", ttl, "1")
+        except Exception:
+            logger.exception("Redis error revoking token %s", jti)
+
+    async def is_revoked(self, jti: str) -> bool:
+        try:
+            return await self._redis.exists(f"revoked:{jti}") > 0
+        except Exception:
+            logger.exception("Redis error checking revocation for %s", jti)
+            return False
+
+
+def _create_token_revocation_store():
+    import os
+    redis_url = os.environ.get("REDIS_URL", "")
+    env = os.environ.get("ENVIRONMENT", "")
+    if redis_url and env != "test":
+        try:
+            import redis.asyncio as aioredis
+            client = aioredis.from_url(redis_url)
+            return RedisTokenRevocationStore(client)
+        except Exception:
+            pass
+    return TokenRevocationStore()
+
+
+token_revocation_store = _create_token_revocation_store()
 
 
 class FailedLoginTracker:
@@ -246,7 +287,91 @@ class FailedLoginTracker:
         return max(0, self._max_attempts - record["count"])
 
 
-failed_login_tracker = FailedLoginTracker()
+class RedisFailedLoginTracker:
+    """Redis-backed failed login tracker.
+
+    Stores per-account attempt data in a Redis hash so the state survives
+    process restarts and is shared across multiple application instances.
+    """
+
+    def __init__(
+        self,
+        redis_client,
+        max_attempts: int = _MAX_FAILED_LOGIN_ATTEMPTS,
+        lockout_duration: int = _LOCKOUT_DURATION_SECONDS,
+    ):
+        self._redis = redis_client
+        self._max_attempts = max_attempts
+        self._lockout_duration = lockout_duration
+
+    async def is_locked(self, account_key: str) -> bool:
+        """Check if the account is currently locked out."""
+        try:
+            locked_until = await self._redis.hget(
+                f"login_attempts:{account_key}", "locked_until"
+            )
+            if locked_until and time.time() < float(locked_until):
+                return True
+        except Exception:
+            logger.exception("Redis error checking lock for %s", account_key)
+        return False
+
+    async def record_failure(self, account_key: str):
+        """Record a failed login attempt. Locks the account if threshold is reached."""
+        try:
+            key = f"login_attempts:{account_key}"
+            count = await self._redis.hincrby(key, "count", 1)
+            if count >= self._max_attempts:
+                locked_until = time.time() + self._lockout_duration
+                await self._redis.hset(key, "locked_until", locked_until)
+                await self._redis.expire(key, self._lockout_duration * 2)
+                logger.warning(
+                    "Account %s locked for %d seconds after %d failed attempts",
+                    account_key,
+                    self._lockout_duration,
+                    count,
+                )
+        except Exception:
+            logger.exception("Redis error recording failure for %s", account_key)
+
+    async def record_success(self, account_key: str):
+        """Clear failed login tracking on successful login."""
+        try:
+            await self._redis.delete(f"login_attempts:{account_key}")
+        except Exception:
+            logger.exception("Redis error recording success for %s", account_key)
+
+    async def get_remaining_attempts(self, account_key: str) -> int:
+        """Return how many attempts remain before lockout."""
+        try:
+            count = await self._redis.hget(
+                f"login_attempts:{account_key}", "count"
+            )
+            if count is None:
+                return self._max_attempts
+            return max(0, self._max_attempts - int(count))
+        except Exception:
+            logger.exception(
+                "Redis error getting remaining attempts for %s", account_key
+            )
+            return self._max_attempts
+
+
+def _create_failed_login_tracker():
+    import os
+    redis_url = os.environ.get("REDIS_URL", "")
+    env = os.environ.get("ENVIRONMENT", "")
+    if redis_url and env != "test":
+        try:
+            import redis.asyncio as aioredis
+            client = aioredis.from_url(redis_url)
+            return RedisFailedLoginTracker(client)
+        except Exception:
+            pass
+    return FailedLoginTracker()
+
+
+failed_login_tracker = _create_failed_login_tracker()
 
 MAX_PASSWORD_HISTORY = 5
 

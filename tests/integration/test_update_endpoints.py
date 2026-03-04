@@ -173,16 +173,15 @@ async def test_close_case():
         # Transition to in_progress first (required before resolve)
         await c.patch(
             f"/cases/{caseid}/status",
-            params={"status": "in_progress"},
+            json={"status": "in_progress"},
             headers=h,
         )
         # Resolve (required before close)
         await c.post(
             f"/cases/{caseid}/resolve",
-            params={
+            json={
                 "resolution_notes": "Fixed",
                 "resolved_by": TEST_USER_ID,
-                "user_id": TEST_USER_ID,
             },
             headers=h,
         )

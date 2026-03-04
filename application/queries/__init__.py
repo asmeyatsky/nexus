@@ -118,9 +118,9 @@ class GetOpportunitiesByAccountQuery:
 class GetOpenOpportunitiesQuery:
     repository: OpportunityRepositoryPort
 
-    async def execute(self) -> List[OpportunityDTO]:
+    async def execute(self, limit: int = 100, offset: int = 0) -> List[OpportunityDTO]:
         opportunities = await self.repository.get_open_opportunities()
-        return [OpportunityDTO.from_entity(o) for o in opportunities]
+        return [OpportunityDTO.from_entity(o) for o in opportunities[offset : offset + limit]]
 
 
 @dataclass
@@ -178,6 +178,6 @@ class ListCasesQuery:
 class GetOpenCasesQuery:
     repository: CaseRepositoryPort
 
-    async def execute(self) -> List[CaseDTO]:
+    async def execute(self, limit: int = 100, offset: int = 0) -> List[CaseDTO]:
         cases = await self.repository.get_open_cases()
-        return [CaseDTO.from_entity(c) for c in cases]
+        return [CaseDTO.from_entity(c) for c in cases[offset : offset + limit]]

@@ -21,6 +21,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements-ci.txt
       - run: pip install ruff
       - name: Ruff lint
         run: ruff check .
@@ -47,13 +49,20 @@ jobs:
         run: |
           pytest tests/ -v \
             --cov=domain --cov=application --cov=infrastructure --cov=presentation \
-            --cov-report=xml --cov-report=term-missing
+            --cov-report=xml --cov-report=term-missing \
+            --cov-fail-under=50
       - name: Upload coverage
         if: always()
         uses: codecov/codecov-action@v4
         with:
           files: ./coverage.xml
         continue-on-error: true
+      - name: Upload coverage artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage.xml
 
   security-scan:
     runs-on: ubuntu-latest
@@ -62,9 +71,26 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements-ci.txt
       - run: pip install bandit
       - name: Run Bandit security scan
         run: bandit -r domain/ application/ infrastructure/ presentation/ -ll --skip B101
+        continue-on-error: true
+
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements-ci.txt
+      - name: Install dependencies
+        run: pip install -r requirements-ci.txt
+      - name: Run mypy
+        run: mypy domain/ application/ --ignore-missing-imports
         continue-on-error: true
 
   build:

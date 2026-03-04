@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 import ipaddress
+import json
 import time
 import threading
 from collections import defaultdict
@@ -150,6 +151,90 @@ class RateLimiter:
             self._buckets.pop(bucket_key, None)
 
 
+class RedisRateLimiter:
+    """Redis-backed token bucket rate limiter.
+
+    Bucket state is stored as JSON under ``rate:{org_id}:{identifier}`` so it
+    is shared across all application instances and survives restarts.
+    Falls back gracefully (allow) on any Redis error.
+    """
+
+    def __init__(self, redis_client):
+        self._redis = redis_client
+        self._config: Dict[str, RateLimitConfig] = {}
+
+    def configure(self, identifier: str, tier: RateLimitTier):
+        limits = RATE_LIMITS[tier]
+        self._config[identifier] = RateLimitConfig(
+            requests=limits["requests"],
+            window=limits["window"],
+            burst=limits["requests"] * 2,
+        )
+
+    async def check_rate_limit(
+        self,
+        identifier: str,
+        org_id: str = None,
+    ) -> tuple[bool, Dict]:
+        config = self._config.get(identifier)
+        if not config:
+            limits = RATE_LIMITS[RateLimitTier.FREE]
+            config = RateLimitConfig(
+                requests=limits["requests"],
+                window=limits["window"],
+                burst=limits["requests"] * 2,
+            )
+
+        key = f"rate:{org_id}:{identifier}" if org_id else f"rate:{identifier}"
+        now = time.time()
+        refill_rate = config.requests / config.window
+
+        try:
+            raw = await self._redis.get(key)
+            if raw:
+                bucket = json.loads(raw)
+                elapsed = now - bucket["last_update"]
+                bucket["tokens"] = min(
+                    config.burst, bucket["tokens"] + elapsed * refill_rate
+                )
+            else:
+                bucket = {"tokens": float(config.burst), "last_update": now}
+
+            bucket["last_update"] = now
+
+            if bucket["tokens"] >= 1:
+                bucket["tokens"] -= 1
+                await self._redis.set(key, json.dumps(bucket), ex=config.window * 2)
+                return True, {
+                    "remaining": int(bucket["tokens"]),
+                    "reset_at": now + config.window,
+                    "limit": config.requests,
+                }
+            else:
+                await self._redis.set(key, json.dumps(bucket), ex=config.window * 2)
+                retry_after = int((1 - bucket["tokens"]) / refill_rate)
+                return False, {
+                    "remaining": 0,
+                    "reset_at": now + retry_after,
+                    "limit": config.requests,
+                    "retry_after": retry_after,
+                }
+        except Exception:
+            # Fail open: allow the request rather than blocking on Redis errors
+            return True, {
+                "remaining": config.requests,
+                "reset_at": now + config.window,
+                "limit": config.requests,
+            }
+
+    async def reset(self, identifier: str, org_id: str = None):
+        key = f"rate:{org_id}:{identifier}" if org_id else f"rate:{identifier}"
+        try:
+            await self._redis.delete(key)
+        except Exception:
+            pass
+
+
 class IPSecurity:
     """IP allowlisting and blocklisting."""
 
@@ -219,8 +304,111 @@ class IPSecurity:
         return list(self._blocked_ips)
 
 
-rate_limiter = RateLimiter()
-ip_security = IPSecurity()
+class RedisIPSecurity:
+    """Redis-backed IP allowlist / blocklist.
+
+    Allowed IPs are stored in a Redis set ``ip_security:allowed``.
+    Blocked IPs are stored in a Redis set ``ip_security:blocked``.
+    Falls back to allowing all traffic on any Redis error.
+    """
+
+    def __init__(self, redis_client):
+        self._redis = redis_client
+        self._enabled = True
+
+    def enable(self):
+        self._enabled = True
+
+    def disable(self):
+        self._enabled = False
+
+    async def add_allowed_ip(self, ip: str, description: str = ""):
+        ip = _validate_ip_address(ip)
+        try:
+            await self._redis.sadd("ip_security:allowed", ip)
+        except Exception:
+            pass
+
+    async def add_blocked_ip(
+        self, ip: str, description: str = "", expires_at: datetime = None
+    ):
+        ip = _validate_ip_address(ip)
+        try:
+            await self._redis.sadd("ip_security:blocked", ip)
+        except Exception:
+            pass
+
+    async def remove_ip(self, ip: str):
+        try:
+            await self._redis.srem("ip_security:allowed", ip)
+            await self._redis.srem("ip_security:blocked", ip)
+        except Exception:
+            pass
+
+    async def check_ip(self, ip: str) -> tuple[bool, str]:
+        if not self._enabled:
+            return True, "allowed"
+
+        try:
+            if await self._redis.sismember("ip_security:blocked", ip):
+                return False, "blocked"
+
+            allowed_count = await self._redis.scard("ip_security:allowed")
+            if allowed_count and not await self._redis.sismember(
+                "ip_security:allowed", ip
+            ):
+                return False, "not_allowed"
+        except Exception:
+            # Fail open on Redis errors
+            return True, "allowed"
+
+        return True, "allowed"
+
+    async def get_allowed_ips(self) -> list:
+        try:
+            members = await self._redis.smembers("ip_security:allowed")
+            return [m.decode() if isinstance(m, bytes) else m for m in members]
+        except Exception:
+            return []
+
+    async def get_blocked_ips(self) -> list:
+        try:
+            members = await self._redis.smembers("ip_security:blocked")
+            return [m.decode() if isinstance(m, bytes) else m for m in members]
+        except Exception:
+            return []
+
+
+def _create_rate_limiter():
+    import os
+    redis_url = os.environ.get("REDIS_URL", "")
+    env = os.environ.get("ENVIRONMENT", "")
+    if redis_url and env != "test":
+        try:
+            import redis.asyncio as aioredis
+            client = aioredis.from_url(redis_url)
+            return RedisRateLimiter(client)
+        except Exception:
+            pass
+    return RateLimiter()
+
+
+def _create_ip_security():
+    import os
+    redis_url = os.environ.get("REDIS_URL", "")
+    env = os.environ.get("ENVIRONMENT", "")
+    if redis_url and env != "test":
+        try:
+            import redis.asyncio as aioredis
+            client = aioredis.from_url(redis_url)
+            return RedisIPSecurity(client)
+        except Exception:
+            pass
+    return IPSecurity()
+
+
+rate_limiter = _create_rate_limiter()
+ip_security = _create_ip_security()
 
 
 class SecurityMiddleware:

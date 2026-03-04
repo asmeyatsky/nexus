@@ -145,16 +145,16 @@ async def on_opportunity_stage_changed(event: OpportunityStageChangedEvent):
 
 async def on_case_escalated(event: CaseEscalatedEvent):
     """Handle case escalation — alert support manager."""
-    logger.info(f"Case escalated: {event.aggregate_id}, priority: {event.priority}")
+    logger.info(f"Case escalated: {event.aggregate_id}, priority: {event.new_priority}")
 
     await _send_notification(
         to="support-manager@company.com",
-        subject=f"URGENT: Case Escalated (Priority: {event.priority})",
-        body=f"Case {event.aggregate_id} has been escalated to priority {event.priority}.",
+        subject=f"URGENT: Case Escalated (Priority: {event.new_priority})",
+        body=f"Case {event.aggregate_id} has been escalated to priority {event.new_priority}.",
     )
     await _fire_webhook(
         "CASE_CREATED",  # Use closest available webhook event
-        {"case_id": event.aggregate_id, "priority": event.priority, "escalated": True},
+        {"case_id": event.aggregate_id, "priority": event.new_priority, "escalated": True},
     )
 
 

@@ -278,6 +278,44 @@ class MetricsCollector:
             "domain_events_total": self.domain_events_total.collect(),
         }
 
+    def to_prometheus_format(self) -> str:
+        """Return metrics in Prometheus text exposition format."""
+        lines: List[str] = []
+
+        # http_requests_total counter
+        lines.append("# HELP http_requests_total Total HTTP requests")
+        lines.append("# TYPE http_requests_total counter")
+        for entry in self.http_requests_total.collect():
+            labels = ",".join(f'{k}="{v}"' for k, v in sorted(entry["labels"].items()))
+            lines.append(f"http_requests_total{{{labels}}} {entry['value']}")
+
+        # http_request_duration_seconds histogram
+        lines.append("# HELP http_request_duration_seconds HTTP request duration")
+        lines.append("# TYPE http_request_duration_seconds histogram")
+        for entry in self.http_request_duration_seconds.collect():
+            labels = ",".join(f'{k}="{v}"' for k, v in sorted(entry["labels"].items()))
+            for bucket, count in entry.get("buckets", {}).items():
+                lines.append(f'http_request_duration_seconds_bucket{{{labels},le="{bucket}"}} {count}')
+            lines.append(f"http_request_duration_seconds_sum{{{labels}}} {entry['sum']}")
+            lines.append(f"http_request_duration_seconds_count{{{labels}}} {entry['count']}")
+
+        # active_connections gauge
+        lines.append("# HELP active_connections Current active connections")
+        lines.append("# TYPE active_connections gauge")
+        for entry in self.active_connections.collect():
+            labels = ",".join(f'{k}="{v}"' for k, v in sorted(entry["labels"].items()))
+            label_str = f"{{{labels}}}" if labels else ""
+            lines.append(f"active_connections{label_str} {entry['value']}")
+
+        # domain_events_total counter
+        lines.append("# HELP domain_events_total Total domain events")
+        lines.append("# TYPE domain_events_total counter")
+        for entry in self.domain_events_total.collect():
+            labels = ",".join(f'{k}="{v}"' for k, v in sorted(entry["labels"].items()))
+            lines.append(f"domain_events_total{{{labels}}} {entry['value']}")
+
+        return "\n".join(lines) + "\n"
+
 
 # Module-level singleton so all components share one collector.
 metrics = MetricsCollector()
