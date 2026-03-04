@@ -29,7 +29,7 @@ def make_contact(account_id=None, email_suffix="test") -> Contact:
 async def test_contact_repo_save_and_get_by_id():
     repo = InMemoryContactRepository()
     contact = make_contact()
-    saved = await repo.save(contact)
+    await repo.save(contact)
 
     found = await repo.get_by_id(contact.id)
     assert found is not None

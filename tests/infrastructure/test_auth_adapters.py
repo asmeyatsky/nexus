@@ -8,7 +8,6 @@ os.environ["DATABASE_URL"] = "sqlite:///test.db"
 os.environ["ENVIRONMENT"] = "test"
 
 import pytest
-import time
 from datetime import datetime, timezone, timedelta
 
 from infrastructure.adapters.auth import (

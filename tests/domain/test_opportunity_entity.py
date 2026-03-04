@@ -11,7 +11,6 @@ from domain.entities.opportunity import Opportunity, OpportunityStage
 from domain.value_objects import Money
 from domain.events import (
     OpportunityCreatedEvent,
-    OpportunityStageChangedEvent,
     OpportunityWonEvent,
     OpportunityLostEvent,
     OpportunityUpdatedEvent,

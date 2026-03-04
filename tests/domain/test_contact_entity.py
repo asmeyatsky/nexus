@@ -2,7 +2,6 @@
 Tests for Contact domain entity.
 """
 
-import pytest
 from uuid import uuid4
 
 from domain.entities.contact import Contact

@@ -107,7 +107,7 @@ async def lifespan(app: FastAPI):
     # Initialize DB session for container if using database
     if container._use_database:
         try:
-            from infrastructure.database import async_session
+            from infrastructure.database import async_session  # noqa: F401
 
             logger.info("Database mode enabled — using SQLAlchemy repositories")
         except Exception as e:

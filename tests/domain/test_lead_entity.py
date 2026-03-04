@@ -7,7 +7,7 @@ from uuid import uuid4
 
 from domain.entities.lead import Lead, LeadStatus, LeadRating
 from domain.value_objects import Email, PhoneNumber
-from domain.events import LeadCreatedEvent, LeadStatusChangedEvent, LeadConvertedEvent
+from domain.events import LeadCreatedEvent, LeadConvertedEvent
 
 
 def make_lead(**kwargs) -> Lead:

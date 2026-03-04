@@ -4,10 +4,9 @@ Tests for Case domain entity.
 
 import pytest
 from uuid import uuid4
-from datetime import datetime, UTC
 
 from domain.entities.case import Case, CaseStatus, CasePriority, CaseOrigin
-from domain.events import CaseCreatedEvent, CaseStatusChangedEvent, CaseResolvedEvent, CaseEscalatedEvent
+from domain.events import CaseCreatedEvent, CaseStatusChangedEvent, CaseResolvedEvent
 
 
 def make_case(**kwargs) -> Case:
