@@ -1,5 +1,8 @@
 # Nexus CRM
 
+![Uploading Generated Image March 04, 2026 - 4_58PM.jpg.jpeg…]()
+
+
 Enterprise Salesforce replacement built on Google Cloud Platform. Nexus CRM provides full-lifecycle customer relationship management with accounts, contacts, opportunities, leads, and cases.
 
 ## Architecture
