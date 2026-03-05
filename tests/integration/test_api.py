@@ -88,4 +88,7 @@ async def test_list_accounts_with_auth():
             headers=_get_auth_headers("user"),
         )
         assert response.status_code == 200
-        assert isinstance(response.json(), list)
+        data = response.json()
+        assert "items" in data
+        assert "total" in data
+        assert isinstance(data["items"], list)

@@ -4,11 +4,14 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
 import { toast } from "sonner";
 import { leadsApi } from "./leads-api";
-import { usePagination } from "@/hooks/use-pagination";
+import { useFilters } from "@/hooks/use-filters";
+import { useSavedViews } from "@/hooks/use-saved-views";
 import { useAuth } from "@/features/auth/auth-context";
 import { PageHeader } from "@/components/shared/page-header";
 import { DataTable, type Column } from "@/components/shared/data-table";
 import { PaginationControls } from "@/components/shared/pagination-controls";
+import { FilterBar } from "@/components/shared/filter-bar";
+import { SavedViewsDropdown } from "@/components/shared/saved-views-dropdown";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -39,17 +42,36 @@ const columns: Column<Lead>[] = [
   },
 ];
 
+const STATUSES = [
+  { value: "new", label: "New" },
+  { value: "contacted", label: "Contacted" },
+  { value: "qualified", label: "Qualified" },
+  { value: "converted", label: "Converted" },
+  { value: "unqualified", label: "Unqualified" },
+  { value: "recycled", label: "Recycled" },
+];
+
+const RATINGS = [
+  { value: "hot", label: "Hot" },
+  { value: "warm", label: "Warm" },
+  { value: "cold", label: "Cold" },
+];
+
 export function LeadsListPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { user } = useAuth();
-  const { limit, offset, page, nextPage, prevPage } = usePagination();
+  const { filters, setFilter, clearFilters, queryParams, hasActiveFilters, page, setPage, limit } = useFilters();
+  const { views, saveView, deleteView } = useSavedViews("leads");
   const [showCreate, setShowCreate] = useState(false);
 
-  const { data = [], isLoading } = useQuery({
-    queryKey: ["leads", { limit, offset }],
-    queryFn: () => leadsApi.list({ limit, offset }),
+  const { data, isLoading } = useQuery({
+    queryKey: ["leads", queryParams],
+    queryFn: () => leadsApi.list(queryParams),
   });
+
+  const items = data?.items ?? [];
+  const total = data?.total ?? 0;
 
   const createMutation = useMutation({
     mutationFn: leadsApi.create,
@@ -66,21 +88,49 @@ export function LeadsListPage() {
       <PageHeader
         title="Leads"
         actions={
-          <Button onClick={() => setShowCreate(true)}>
-            <Plus className="mr-2 h-4 w-4" /> New Lead
-          </Button>
+          <div className="flex gap-2">
+            <SavedViewsDropdown
+              views={views}
+              onLoad={(f) => { for (const [k, v] of Object.entries(f)) setFilter(k, v); }}
+              onSave={(name) => saveView(name, filters)}
+              onDelete={deleteView}
+            />
+            <Button onClick={() => setShowCreate(true)}>
+              <Plus className="mr-2 h-4 w-4" /> New Lead
+            </Button>
+          </div>
         }
+      />
+
+      <FilterBar
+        search={filters.search}
+        onSearchChange={(v) => setFilter("search", v)}
+        filters={[
+          { key: "status", label: "Status", options: STATUSES },
+          { key: "rating", label: "Rating", options: RATINGS },
+        ]}
+        filterValues={filters}
+        onFilterChange={setFilter}
+        onClear={clearFilters}
+        hasActiveFilters={hasActiveFilters}
       />
 
       <DataTable
         columns={columns}
-        data={data}
+        data={items}
         isLoading={isLoading}
         emptyMessage="No leads found."
         onRowClick={(row) => navigate(`/leads/${row.id}`)}
       />
 
-      <PaginationControls page={page} hasMore={data.length === limit} onPrev={prevPage} onNext={nextPage} />
+      <PaginationControls
+        page={page}
+        hasMore={page * limit < total}
+        onPrev={() => setPage(page - 1)}
+        onNext={() => setPage(page + 1)}
+        total={total}
+        limit={limit}
+      />
 
       <Dialog open={showCreate} onOpenChange={setShowCreate}>
         <DialogContent className="max-w-2xl">

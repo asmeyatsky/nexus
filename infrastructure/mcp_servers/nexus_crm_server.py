@@ -539,6 +539,26 @@ class InMemoryAccountRepository:
     async def delete(self, account_id):
         self._accounts.pop(str(account_id), None)
 
+    async def search(self, search=None, industry=None, territory=None,
+                     owner_id=None, is_active=None, sort_by="created_at",
+                     sort_order="desc", limit=100, offset=0):
+        results = list(self._accounts.values())
+        if search:
+            q = search.lower()
+            results = [a for a in results if q in a.name.lower() or (a.website and q in str(a.website).lower())]
+        if industry:
+            results = [a for a in results if (a.industry.type.value if hasattr(a.industry, 'type') else str(a.industry)) == industry]
+        if territory:
+            results = [a for a in results if (a.territory.value if hasattr(a.territory, 'value') else str(a.territory)) == territory]
+        if owner_id:
+            results = [a for a in results if str(a.owner_id) == str(owner_id)]
+        if is_active is not None:
+            results = [a for a in results if a.is_active == is_active]
+        total = len(results)
+        reverse = sort_order == "desc"
+        results.sort(key=lambda a: getattr(a, sort_by, a.created_at), reverse=reverse)
+        return results[offset:offset + limit], total
+
 
 class InMemoryContactRepository:
     """In-memory contact repository for development."""
@@ -573,6 +593,24 @@ class InMemoryContactRepository:
 
     async def delete(self, contact_id):
         self._contacts.pop(str(contact_id), None)
+
+    async def search(self, search=None, account_id=None, owner_id=None,
+                     is_active=None, sort_by="created_at", sort_order="desc",
+                     limit=100, offset=0):
+        results = list(self._contacts.values())
+        if search:
+            q = search.lower()
+            results = [c for c in results if q in c.first_name.lower() or q in c.last_name.lower() or q in str(c.email).lower()]
+        if account_id:
+            results = [c for c in results if str(c.account_id) == str(account_id)]
+        if owner_id:
+            results = [c for c in results if str(c.owner_id) == str(owner_id)]
+        if is_active is not None:
+            results = [c for c in results if c.is_active == is_active]
+        total = len(results)
+        reverse = sort_order == "desc"
+        results.sort(key=lambda c: getattr(c, sort_by, c.created_at), reverse=reverse)
+        return results[offset:offset + limit], total
 
 
 class InMemoryOpportunityRepository:
@@ -619,6 +657,31 @@ class InMemoryOpportunityRepository:
     async def delete(self, opportunity_id):
         self._opportunities.pop(str(opportunity_id), None)
 
+    async def search(self, search=None, stage=None, owner_id=None,
+                     account_id=None, is_closed=None, close_date_start=None,
+                     close_date_end=None, sort_by="created_at", sort_order="desc",
+                     limit=100, offset=0):
+        results = list(self._opportunities.values())
+        if search:
+            q = search.lower()
+            results = [o for o in results if q in o.name.lower()]
+        if stage:
+            results = [o for o in results if o.stage.value == stage]
+        if owner_id:
+            results = [o for o in results if str(o.owner_id) == str(owner_id)]
+        if account_id:
+            results = [o for o in results if str(o.account_id) == str(account_id)]
+        if is_closed is not None:
+            results = [o for o in results if o.is_closed == is_closed]
+        if close_date_start:
+            results = [o for o in results if o.close_date >= close_date_start]
+        if close_date_end:
+            results = [o for o in results if o.close_date <= close_date_end]
+        total = len(results)
+        reverse = sort_order == "desc"
+        results.sort(key=lambda o: getattr(o, sort_by, o.created_at), reverse=reverse)
+        return results[offset:offset + limit], total
+
 
 class InMemoryLeadRepository:
     """In-memory lead repository for development."""
@@ -661,6 +724,26 @@ class InMemoryLeadRepository:
 
     async def delete(self, lead_id):
         self._leads.pop(str(lead_id), None)
+
+    async def search(self, search=None, status=None, rating=None, owner_id=None,
+                     source=None, sort_by="created_at", sort_order="desc",
+                     limit=100, offset=0):
+        results = list(self._leads.values())
+        if search:
+            q = search.lower()
+            results = [l for l in results if q in l.first_name.lower() or q in l.last_name.lower() or q in str(l.email).lower() or q in l.company.lower()]
+        if status:
+            results = [l for l in results if l.status.value == status]
+        if rating:
+            results = [l for l in results if l.rating.value == rating]
+        if owner_id:
+            results = [l for l in results if str(l.owner_id) == str(owner_id)]
+        if source:
+            results = [l for l in results if l.source and l.source == source]
+        total = len(results)
+        reverse = sort_order == "desc"
+        results.sort(key=lambda l: getattr(l, sort_by, l.created_at), reverse=reverse)
+        return results[offset:offset + limit], total
 
 
 class InMemoryCaseRepository:
@@ -705,6 +788,28 @@ class InMemoryCaseRepository:
 
     async def delete(self, case_id):
         self._cases.pop(str(case_id), None)
+
+    async def search(self, search=None, status=None, priority=None, origin=None,
+                     owner_id=None, account_id=None, sort_by="created_at",
+                     sort_order="desc", limit=100, offset=0):
+        results = list(self._cases.values())
+        if search:
+            q = search.lower()
+            results = [c for c in results if q in c.subject.lower() or q in c.case_number.lower()]
+        if status:
+            results = [c for c in results if c.status.value == status]
+        if priority:
+            results = [c for c in results if c.priority.value == priority]
+        if origin:
+            results = [c for c in results if c.origin.value == origin]
+        if owner_id:
+            results = [c for c in results if str(c.owner_id) == str(owner_id)]
+        if account_id:
+            results = [c for c in results if str(c.account_id) == str(account_id)]
+        total = len(results)
+        reverse = sort_order == "desc"
+        results.sort(key=lambda c: getattr(c, sort_by, c.created_at), reverse=reverse)
+        return results[offset:offset + limit], total
 
 
 async def main():

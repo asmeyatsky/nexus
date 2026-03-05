@@ -13,6 +13,9 @@ import { LeadsListPage } from "@/features/leads/leads-list-page";
 import { LeadDetailPage } from "@/features/leads/lead-detail-page";
 import { CasesListPage } from "@/features/cases/cases-list-page";
 import { CaseDetailPage } from "@/features/cases/case-detail-page";
+import { ReportsPage } from "@/features/reports/reports-page";
+import { AnalyticsPage } from "@/features/analytics/analytics-page";
+import { ReportBuilderPage } from "@/features/report-builder/report-builder-page";
 
 export default function App() {
   return (
@@ -31,6 +34,9 @@ export default function App() {
           <Route path="leads/:id" element={<LeadDetailPage />} />
           <Route path="cases" element={<CasesListPage />} />
           <Route path="cases/:id" element={<CaseDetailPage />} />
+          <Route path="reports" element={<ReportsPage />} />
+          <Route path="analytics" element={<AnalyticsPage />} />
+          <Route path="report-builder" element={<ReportBuilderPage />} />
         </Route>
       </Route>
     </Routes>

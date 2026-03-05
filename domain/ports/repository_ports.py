@@ -12,7 +12,7 @@ Key Design Decisions:
 3. No framework-specific types in domain layer
 """
 
-from typing import Protocol, Optional, List
+from typing import Protocol, Optional, List, Tuple, Any, Dict
 from datetime import datetime
 from uuid import UUID
 
@@ -34,6 +34,19 @@ class AccountRepositoryPort(Protocol):
 
     async def delete(self, account_id: UUID) -> None: ...
 
+    async def search(
+        self,
+        search: Optional[str] = None,
+        industry: Optional[str] = None,
+        territory: Optional[str] = None,
+        owner_id: Optional[str] = None,
+        is_active: Optional[bool] = None,
+        sort_by: str = "created_at",
+        sort_order: str = "desc",
+        limit: int = 100,
+        offset: int = 0,
+    ) -> Tuple[List[Account], int]: ...
+
 
 class ContactRepositoryPort(Protocol):
     async def save(self, contact: Contact) -> Contact: ...
@@ -49,6 +62,18 @@ class ContactRepositoryPort(Protocol):
     async def get_by_owner(self, owner_id: UUID) -> List[Contact]: ...
 
     async def delete(self, contact_id: UUID) -> None: ...
+
+    async def search(
+        self,
+        search: Optional[str] = None,
+        account_id: Optional[str] = None,
+        owner_id: Optional[str] = None,
+        is_active: Optional[bool] = None,
+        sort_by: str = "created_at",
+        sort_order: str = "desc",
+        limit: int = 100,
+        offset: int = 0,
+    ) -> Tuple[List[Contact], int]: ...
 
 
 class OpportunityRepositoryPort(Protocol):
@@ -72,6 +97,21 @@ class OpportunityRepositoryPort(Protocol):
 
     async def delete(self, opportunity_id: UUID) -> None: ...
 
+    async def search(
+        self,
+        search: Optional[str] = None,
+        stage: Optional[str] = None,
+        owner_id: Optional[str] = None,
+        account_id: Optional[str] = None,
+        is_closed: Optional[bool] = None,
+        close_date_start: Optional[datetime] = None,
+        close_date_end: Optional[datetime] = None,
+        sort_by: str = "created_at",
+        sort_order: str = "desc",
+        limit: int = 100,
+        offset: int = 0,
+    ) -> Tuple[List[Opportunity], int]: ...
+
 
 class LeadRepositoryPort(Protocol):
     async def save(self, lead: Lead) -> Lead: ...
@@ -89,6 +129,19 @@ class LeadRepositoryPort(Protocol):
     async def get_unqualified_leads(self) -> List[Lead]: ...
 
     async def delete(self, lead_id: UUID) -> None: ...
+
+    async def search(
+        self,
+        search: Optional[str] = None,
+        status: Optional[str] = None,
+        rating: Optional[str] = None,
+        owner_id: Optional[str] = None,
+        source: Optional[str] = None,
+        sort_by: str = "created_at",
+        sort_order: str = "desc",
+        limit: int = 100,
+        offset: int = 0,
+    ) -> Tuple[List[Lead], int]: ...
 
 
 class CaseRepositoryPort(Protocol):
@@ -109,3 +162,17 @@ class CaseRepositoryPort(Protocol):
     async def get_open_cases(self) -> List[Case]: ...
 
     async def delete(self, case_id: UUID) -> None: ...
+
+    async def search(
+        self,
+        search: Optional[str] = None,
+        status: Optional[str] = None,
+        priority: Optional[str] = None,
+        origin: Optional[str] = None,
+        owner_id: Optional[str] = None,
+        account_id: Optional[str] = None,
+        sort_by: str = "created_at",
+        sort_order: str = "desc",
+        limit: int = 100,
+        offset: int = 0,
+    ) -> Tuple[List[Case], int]: ...

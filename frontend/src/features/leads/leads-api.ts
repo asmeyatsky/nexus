@@ -1,9 +1,10 @@
 import apiClient from "@/lib/api-client";
 import type { Lead, CreateLeadRequest, ConvertLeadRequest } from "./leads-types";
+import type { PaginatedResponse } from "@/lib/types";
 
 export const leadsApi = {
-  list: (params: { limit: number; offset: number }) =>
-    apiClient.get<Lead[]>("/leads", { params }).then((r) => r.data),
+  list: (params: Record<string, string | number>) =>
+    apiClient.get<PaginatedResponse<Lead>>("/leads", { params }).then((r) => r.data),
 
   get: (id: string) =>
     apiClient.get<Lead>(`/leads/${id}`).then((r) => r.data),

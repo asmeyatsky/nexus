@@ -41,6 +41,11 @@ from application.queries import (
     GetCaseByNumberQuery,
     ListCasesQuery,
     GetOpenCasesQuery,
+    SearchAccountsQuery,
+    SearchContactsQuery,
+    SearchOpportunitiesQuery,
+    SearchLeadsQuery,
+    SearchCasesQuery,
 )
 from application.dtos import (
     AccountDTO,
@@ -87,6 +92,11 @@ __all__ = [
     "GetCaseByNumberQuery",
     "ListCasesQuery",
     "GetOpenCasesQuery",
+    "SearchAccountsQuery",
+    "SearchContactsQuery",
+    "SearchOpportunitiesQuery",
+    "SearchLeadsQuery",
+    "SearchCasesQuery",
     "AccountDTO",
     "CreateAccountDTO",
     "ContactDTO",

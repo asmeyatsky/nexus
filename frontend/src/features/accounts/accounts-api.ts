@@ -1,9 +1,10 @@
 import apiClient from "@/lib/api-client";
 import type { Account, CreateAccountRequest } from "./accounts-types";
+import type { PaginatedResponse } from "@/lib/types";
 
 export const accountsApi = {
-  list: (params: { limit: number; offset: number }) =>
-    apiClient.get<Account[]>("/accounts", { params }).then((r) => r.data),
+  list: (params: Record<string, string | number>) =>
+    apiClient.get<PaginatedResponse<Account>>("/accounts", { params }).then((r) => r.data),
 
   get: (id: string) =>
     apiClient.get<Account>(`/accounts/${id}`).then((r) => r.data),

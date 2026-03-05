@@ -4,11 +4,14 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
 import { toast } from "sonner";
 import { accountsApi } from "./accounts-api";
-import { usePagination } from "@/hooks/use-pagination";
+import { useFilters } from "@/hooks/use-filters";
+import { useSavedViews } from "@/hooks/use-saved-views";
 import { useAuth } from "@/features/auth/auth-context";
 import { PageHeader } from "@/components/shared/page-header";
 import { DataTable, type Column } from "@/components/shared/data-table";
 import { PaginationControls } from "@/components/shared/pagination-controls";
+import { FilterBar } from "@/components/shared/filter-bar";
+import { SavedViewsDropdown } from "@/components/shared/saved-views-dropdown";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -38,17 +41,42 @@ const columns: Column<Account>[] = [
   },
 ];
 
+const INDUSTRIES = [
+  { value: "technology", label: "Technology" },
+  { value: "finance", label: "Finance" },
+  { value: "healthcare", label: "Healthcare" },
+  { value: "manufacturing", label: "Manufacturing" },
+  { value: "retail", label: "Retail" },
+  { value: "education", label: "Education" },
+  { value: "government", label: "Government" },
+  { value: "nonprofit", label: "Nonprofit" },
+  { value: "other", label: "Other" },
+];
+
+const TERRITORIES = [
+  { value: "north_america", label: "North America" },
+  { value: "europe", label: "Europe" },
+  { value: "asia_pacific", label: "Asia Pacific" },
+  { value: "latin_america", label: "Latin America" },
+  { value: "middle_east", label: "Middle East" },
+  { value: "africa", label: "Africa" },
+];
+
 export function AccountsListPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { user } = useAuth();
-  const { limit, offset, page, nextPage, prevPage } = usePagination();
+  const { filters, setFilter, clearFilters, queryParams, hasActiveFilters, page, setPage, limit } = useFilters();
+  const { views, saveView, deleteView } = useSavedViews("accounts");
   const [showCreate, setShowCreate] = useState(false);
 
-  const { data = [], isLoading } = useQuery({
-    queryKey: ["accounts", { limit, offset }],
-    queryFn: () => accountsApi.list({ limit, offset }),
+  const { data, isLoading } = useQuery({
+    queryKey: ["accounts", queryParams],
+    queryFn: () => accountsApi.list(queryParams),
   });
+
+  const items = data?.items ?? [];
+  const total = data?.total ?? 0;
 
   const createMutation = useMutation({
     mutationFn: accountsApi.create,
@@ -65,15 +93,36 @@ export function AccountsListPage() {
       <PageHeader
         title="Accounts"
         actions={
-          <Button onClick={() => setShowCreate(true)}>
-            <Plus className="mr-2 h-4 w-4" /> New Account
-          </Button>
+          <div className="flex gap-2">
+            <SavedViewsDropdown
+              views={views}
+              onLoad={(f) => { for (const [k, v] of Object.entries(f)) setFilter(k, v); }}
+              onSave={(name) => saveView(name, filters)}
+              onDelete={deleteView}
+            />
+            <Button onClick={() => setShowCreate(true)}>
+              <Plus className="mr-2 h-4 w-4" /> New Account
+            </Button>
+          </div>
         }
+      />
+
+      <FilterBar
+        search={filters.search}
+        onSearchChange={(v) => setFilter("search", v)}
+        filters={[
+          { key: "industry", label: "Industry", options: INDUSTRIES },
+          { key: "territory", label: "Territory", options: TERRITORIES },
+        ]}
+        filterValues={filters}
+        onFilterChange={setFilter}
+        onClear={clearFilters}
+        hasActiveFilters={hasActiveFilters}
       />
 
       <DataTable
         columns={columns}
-        data={data}
+        data={items}
         isLoading={isLoading}
         emptyMessage="No accounts found. Create your first account."
         onRowClick={(row) => navigate(`/accounts/${row.id}`)}
@@ -81,9 +130,11 @@ export function AccountsListPage() {
 
       <PaginationControls
         page={page}
-        hasMore={data.length === limit}
-        onPrev={prevPage}
-        onNext={nextPage}
+        hasMore={page * limit < total}
+        onPrev={() => setPage(page - 1)}
+        onNext={() => setPage(page + 1)}
+        total={total}
+        limit={limit}
       />
 
       <Dialog open={showCreate} onOpenChange={setShowCreate}>

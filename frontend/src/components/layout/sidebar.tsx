@@ -6,6 +6,9 @@ import {
   TrendingUp,
   UserPlus,
   Headphones,
+  BarChart3,
+  LineChart,
+  Wand2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -16,6 +19,9 @@ const navItems = [
   { to: "/opportunities", label: "Opportunities", icon: TrendingUp },
   { to: "/leads", label: "Leads", icon: UserPlus },
   { to: "/cases", label: "Cases", icon: Headphones },
+  { to: "/reports", label: "Reports", icon: BarChart3 },
+  { to: "/analytics", label: "Analytics", icon: LineChart },
+  { to: "/report-builder", label: "Report Builder", icon: Wand2 },
 ];
 
 export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {

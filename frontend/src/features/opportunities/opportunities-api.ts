@@ -1,9 +1,10 @@
 import apiClient from "@/lib/api-client";
 import type { Opportunity, CreateOpportunityRequest, UpdateStageRequest } from "./opportunities-types";
+import type { PaginatedResponse } from "@/lib/types";
 
 export const opportunitiesApi = {
-  list: (params: { limit: number; offset: number }) =>
-    apiClient.get<Opportunity[]>("/opportunities", { params }).then((r) => r.data),
+  list: (params: Record<string, string | number>) =>
+    apiClient.get<PaginatedResponse<Opportunity>>("/opportunities", { params }).then((r) => r.data),
 
   listOpen: (params: { limit: number; offset: number }) =>
     apiClient.get<Opportunity[]>("/opportunities/open", { params }).then((r) => r.data),

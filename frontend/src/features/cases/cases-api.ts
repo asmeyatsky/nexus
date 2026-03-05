@@ -1,9 +1,10 @@
 import apiClient from "@/lib/api-client";
 import type { Case, CreateCaseRequest, ResolveCaseRequest } from "./cases-types";
+import type { PaginatedResponse } from "@/lib/types";
 
 export const casesApi = {
-  list: (params: { limit: number; offset: number }) =>
-    apiClient.get<Case[]>("/cases", { params }).then((r) => r.data),
+  list: (params: Record<string, string | number>) =>
+    apiClient.get<PaginatedResponse<Case>>("/cases", { params }).then((r) => r.data),
 
   listOpen: (params: { limit: number; offset: number }) =>
     apiClient.get<Case[]>("/cases/open", { params }).then((r) => r.data),

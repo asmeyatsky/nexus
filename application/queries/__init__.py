@@ -8,8 +8,9 @@ Architectural Intent:
 """
 
 from dataclasses import dataclass
-from typing import Optional, List
+from typing import Optional, List, Tuple
 from uuid import UUID
+from datetime import datetime
 
 from domain.ports.repository_ports import (
     AccountRepositoryPort,
@@ -184,3 +185,75 @@ class GetOpenCasesQuery:
     async def execute(self, limit: int = 100, offset: int = 0) -> List[CaseDTO]:
         cases = await self.repository.get_open_cases()
         return [CaseDTO.from_entity(c) for c in cases[offset : offset + limit]]
+
+
+@dataclass
+class SearchAccountsQuery:
+    repository: AccountRepositoryPort
+
+    async def execute(self, search=None, industry=None, territory=None,
+                      owner_id=None, is_active=None, sort_by="created_at",
+                      sort_order="desc", limit=100, offset=0) -> Tuple[List[AccountDTO], int]:
+        items, total = await self.repository.search(
+            search=search, industry=industry, territory=territory,
+            owner_id=owner_id, is_active=is_active, sort_by=sort_by,
+            sort_order=sort_order, limit=limit, offset=offset)
+        return [AccountDTO.from_entity(a) for a in items], total
+
+
+@dataclass
+class SearchContactsQuery:
+    repository: ContactRepositoryPort
+
+    async def execute(self, search=None, account_id=None, owner_id=None,
+                      is_active=None, sort_by="created_at", sort_order="desc",
+                      limit=100, offset=0) -> Tuple[List[ContactDTO], int]:
+        items, total = await self.repository.search(
+            search=search, account_id=account_id, owner_id=owner_id,
+            is_active=is_active, sort_by=sort_by, sort_order=sort_order,
+            limit=limit, offset=offset)
+        return [ContactDTO.from_entity(c) for c in items], total
+
+
+@dataclass
+class SearchOpportunitiesQuery:
+    repository: OpportunityRepositoryPort
+
+    async def execute(self, search=None, stage=None, owner_id=None,
+                      account_id=None, is_closed=None, close_date_start=None,
+                      close_date_end=None, sort_by="created_at", sort_order="desc",
+                      limit=100, offset=0) -> Tuple[List[OpportunityDTO], int]:
+        items, total = await self.repository.search(
+            search=search, stage=stage, owner_id=owner_id,
+            account_id=account_id, is_closed=is_closed,
+            close_date_start=close_date_start, close_date_end=close_date_end,
+            sort_by=sort_by, sort_order=sort_order, limit=limit, offset=offset)
+        return [OpportunityDTO.from_entity(o) for o in items], total
+
+
+@dataclass
+class SearchLeadsQuery:
+    repository: LeadRepositoryPort
+
+    async def execute(self, search=None, status=None, rating=None, owner_id=None,
+                      source=None, sort_by="created_at", sort_order="desc",
+                      limit=100, offset=0) -> Tuple[List[LeadDTO], int]:
+        items, total = await self.repository.search(
+            search=search, status=status, rating=rating, owner_id=owner_id,
+            source=source, sort_by=sort_by, sort_order=sort_order,
+            limit=limit, offset=offset)
+        return [LeadDTO.from_entity(l) for l in items], total
+
+
+@dataclass
+class SearchCasesQuery:
+    repository: CaseRepositoryPort
+
+    async def execute(self, search=None, status=None, priority=None, origin=None,
+                      owner_id=None, account_id=None, sort_by="created_at",
+                      sort_order="desc", limit=100, offset=0) -> Tuple[List[CaseDTO], int]:
+        items, total = await self.repository.search(
+            search=search, status=status, priority=priority, origin=origin,
+            owner_id=owner_id, account_id=account_id, sort_by=sort_by,
+            sort_order=sort_order, limit=limit, offset=offset)
+        return [CaseDTO.from_entity(c) for c in items], total
